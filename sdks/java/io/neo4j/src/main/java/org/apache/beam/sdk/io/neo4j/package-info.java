@@ -16,22 +16,9 @@
  * limitations under the License.
  */
 
-import PrecommitJobBuilder
+/** Transforms for reading from and writing to from Neo4j. */
+@Experimental(Kind.SOURCE_SINK)
+package org.apache.beam.sdk.io.neo4j;
 
-PrecommitJobBuilder builder = new PrecommitJobBuilder(
-    scope: this,
-    nameBase: 'Python',
-    gradleTask: ':pythonPreCommit',
-    timeoutMins: 180,
-    triggerPathPatterns: [
-      '^model/.*$',
-      '^sdks/python/.*$',
-      '^release/.*$',
-    ]
-    )
-builder.build {
-  // Publish all test results to Jenkins.
-  publishers {
-    archiveJunit('**/pytest*.xml')
-  }
-}
+import org.apache.beam.sdk.annotations.Experimental;
+import org.apache.beam.sdk.annotations.Experimental.Kind;
