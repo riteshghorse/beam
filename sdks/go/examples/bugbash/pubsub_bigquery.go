@@ -38,7 +38,9 @@ func main() {
 	topic := "riteshghorse-bash"
 	col := pubsubio.Read(s, project, topic, &pubsubio.ReadOptions{})
 	//wscol := beam.WindowInto(s, window.NewGlobalWindows(), col, beam.Trigger(trigger.AfterCount(int32(100))))
-	wscol := beam.WindowInto(s, window.NewFixedWindows(time.Second*10), col, beam.Trigger(trigger.AfterProcessingTime().PlusDelay(time.Second*20)))
+	//wscol := beam.WindowInto(s, window.NewFixedWindows(time.Second*10), col, beam.Trigger(trigger.AfterProcessingTime().PlusDelay(time.Second*20)))
+	wscol := beam.WindowInto(s, window.NewFixedWindows(time.Second*10), col, beam.Trigger(trigger.AfterCount(int32(1))))
+
 	scol := beam.ParDo(s, stringx.FromBytes, wscol)
 
 	ucol := beam.ParDo(s, &Caps{}, scol)
