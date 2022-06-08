@@ -34,10 +34,6 @@ func init() {
 	beam.RegisterType(reflect.TypeOf((*MultiplyByTen)(nil)))
 }
 
-func init() {
-	beam.RegisterType(reflect.TypeOf((*Caps)(nil)))
-}
-
 type MultiplyByTen struct{}
 
 func (m *MultiplyByTen) ProcessElement(ctx context.Context, element string, emit func(string)) {
