@@ -32,6 +32,7 @@ import (
 
 func init() {
 	beam.RegisterType(reflect.TypeOf((*MultiplyByTen)(nil)))
+	beam.RegisterType(reflect.TypeOf((*Logger)(nil)))
 }
 
 type MultiplyByTen struct{}
@@ -43,6 +44,14 @@ func (m *MultiplyByTen) ProcessElement(ctx context.Context, element string, emit
 
 }
 
+type Logger struct {
+	Status string
+}
+
+func (l *Logger) ProcessElement(ctx context.Context, w beam.Window, ts beam.EventTime, element string) {
+	log.Infof(ctx, "%s: Window: %#v, EventTime: %v, element: %v", l.Status, w, ts, element[:10])
+}
+
 func main() {
 	flag.Parse()
 	beam.Init()
@@ -50,21 +59,23 @@ func main() {
 	ctx := context.Background()
 	p, s := beam.NewPipelineWithRoot()
 
-	project := "pubsub-public-data"
-	topic := "taxirides-realtime"
+	project := gcpopts.GetProject(ctx)
+	topic := "riteshghorse-wordcap"
 	col := pubsubio.Read(s, project, topic, &pubsubio.ReadOptions{})
-	wscol := beam.WindowInto(s, window.NewFixedWindows(time.Minute), col, beam.Trigger(trigger.Default()))
+	windowed := beam.WindowInto(s, window.NewFixedWindows(time.Second*30), col, beam.Trigger(trigger.Default()))
 
-	scol := beam.ParDo(s, stringx.FromBytes, wscol)
+	str := beam.ParDo(s, stringx.FromBytes, windowed)
 
-	tcol := beam.Reshuffle(s, scol)
-	rcol := beam.ParDo(s, &MultiplyByTen{}, tcol)
+	beam.ParDo0(s, &Logger{Status: "Before reshuffle"}, str)
+	reshuffled := beam.Reshuffle(s, str)
+	beam.ParDo0(s, &Logger{Status: "After reshuffle"}, reshuffled)
+	transformed := beam.ParDo(s, &MultiplyByTen{}, reshuffled)
 
 	project = gcpopts.GetProject(ctx)
 	output := "riteshghorse-taxirides"
 
-	ocol := beam.ParDo(s, stringx.ToBytes, rcol)
-	pubsubio.Write(s, project, output, ocol)
+	outputStr := beam.ParDo(s, stringx.ToBytes, transformed)
+	pubsubio.Write(s, project, output, outputStr)
 	if err := beamx.Run(context.Background(), p); err != nil {
 		log.Exitf(ctx, "Failed to execute job: %v", err)
 	}
