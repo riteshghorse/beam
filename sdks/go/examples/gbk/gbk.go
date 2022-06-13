@@ -20,35 +20,23 @@ import (
 	"flag"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window/trigger"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/stringx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/options/gcpopts"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
-	"reflect"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/debug"
+	"math/rand"
 	"time"
 )
 
 func init() {
-	beam.RegisterType(reflect.TypeOf((*MultiplyByTen)(nil)))
-	beam.RegisterType(reflect.TypeOf((*Logger)(nil)))
+	beam.RegisterFunction(createPair)
 }
 
-type MultiplyByTen struct{}
-
-func (m *MultiplyByTen) ProcessElement(ctx context.Context, element string, emit func(string)) {
-	for i := 0; i < 10; i++ {
-		emit(element)
-	}
-}
-
-type Logger struct {
-	Status string
-}
-
-func (l *Logger) ProcessElement(ctx context.Context, w beam.Window, ts beam.EventTime, element string) {
-	log.Infof(ctx, "%s: Window: %#v, EventTime: %v, element: %v", l.Status, w, ts, element[:10])
+func createPair(ctx context.Context, element string, emit func(string, string)) {
+	keys := []string{"A", "B", "C"}
+	emit(keys[rand.Intn(3)], element)
 }
 
 func main() {
@@ -61,20 +49,14 @@ func main() {
 	project := gcpopts.GetProject(ctx)
 	topic := "riteshghorse-wordcap"
 	col := pubsubio.Read(s, project, topic, &pubsubio.ReadOptions{})
-	windowed := beam.WindowInto(s, window.NewFixedWindows(time.Second*30), col, beam.Trigger(trigger.Default()))
+	windowed := beam.WindowInto(s, window.NewFixedWindows(time.Second*30), col)
 
 	str := beam.ParDo(s, stringx.FromBytes, windowed)
+	keyed := beam.ParDo(s, createPair, str)
+	debug.Print(s, keyed)
+	transformed := beam.GroupByKey(s, keyed)
 
-	beam.ParDo0(s, &Logger{Status: "Before reshuffle"}, str)
-	reshuffled := beam.Reshuffle(s, str)
-	beam.ParDo0(s, &Logger{Status: "After reshuffle"}, reshuffled)
-	transformed := beam.ParDo(s, &MultiplyByTen{}, reshuffled)
-
-	project = gcpopts.GetProject(ctx)
-	output := "riteshghorse-taxirides"
-
-	outputStr := beam.ParDo(s, stringx.ToBytes, transformed)
-	pubsubio.Write(s, project, output, outputStr)
+	debug.Print(s, transformed)
 	if err := beamx.Run(context.Background(), p); err != nil {
 		log.Exitf(ctx, "Failed to execute job: %v", err)
 	}
