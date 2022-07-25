@@ -195,6 +195,10 @@ func IsKV(t FullType) bool {
 	return t.Type() == KVType
 }
 
+func IsKVG(t FullType) bool {
+	return t.Type() == reflect.TypeOf((*KV[int, int])(nil)).Elem()
+}
+
 // NewKV constructs a new KV of the given key and value types.
 func NewKV(components ...FullType) FullType {
 	return New(KVType, components...)

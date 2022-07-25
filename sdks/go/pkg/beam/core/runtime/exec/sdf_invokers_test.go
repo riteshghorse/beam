@@ -319,7 +319,7 @@ func TestInvokes(t *testing.T) {
 			{
 				name: "SingleElem",
 				sdf:  sdf,
-				elms: &FullValue{Elm: 1},
+				elms: &FullValue{Elm: typex.KV[int, int]{K: 1, V: 2}},
 				rest: &VetRestriction{ID: "Sdf"},
 				want: &VetRestriction{ID: "Sdf", CreateTracker: true, TruncateRest: true, RestSize: true, Val: 1},
 			}, {
@@ -504,14 +504,14 @@ type VetSdf struct {
 
 // CreateInitialRestriction creates a restriction with the given values and
 // with the appropriate flags to track that this was called.
-func (fn *VetSdf) CreateInitialRestriction(i int) *VetRestriction {
+func (fn *VetSdf) CreateInitialRestriction(i typex.KV[int, int]) *VetRestriction {
 	return &VetRestriction{ID: "Sdf", Val: i, CreateRest: true}
 }
 
 // SplitRestriction outputs two identical restrictions, each being a copy of the
 // initial one, but with the appropriate flags to track this was called. The
 // split restrictions add a suffix of the form ".#" to the ID.
-func (fn *VetSdf) SplitRestriction(i int, rest *VetRestriction) []*VetRestriction {
+func (fn *VetSdf) SplitRestriction(i typex.KV[int, int], rest *VetRestriction) []*VetRestriction {
 	rest.SplitRest = true
 	rest.Val = i
 
@@ -525,15 +525,15 @@ func (fn *VetSdf) SplitRestriction(i int, rest *VetRestriction) []*VetRestrictio
 
 // RestrictionSize just returns i as the size, as well as flipping appropriate
 // flags on the restriction to track that this was called.
-func (fn *VetSdf) RestrictionSize(i int, rest *VetRestriction) float64 {
-	rest.Key = nil
-	rest.Val = i
+func (fn *VetSdf) RestrictionSize(i typex.KV[int, int], rest *VetRestriction) float64 {
+	rest.Key = i.K
+	rest.Val = i.V
 	rest.RestSize = true
-	return (float64)(i)
+	return float64(1)
 }
 
 // TruncateRestriction truncates the restriction into half.
-func (fn *VetSdf) TruncateRestriction(rest *VetRTracker, i int) *VetRestriction {
+func (fn *VetSdf) TruncateRestriction(rest *VetRTracker, i typex.KV[int, int]) *VetRestriction {
 	rest.Rest.TruncateRest = true
 	return rest.Rest
 }
@@ -555,10 +555,10 @@ func (fn *VetSdf) CreateWatermarkEstimator() *VetWatermarkEstimator {
 // Note that emitting restrictions is discouraged in normal usage. It is only
 // done here to allow validating that ProcessElement is being executed
 // properly.
-func (fn *VetSdf) ProcessElement(rt *VetRTracker, i int, emit func(*VetRestriction)) sdf.ProcessContinuation {
+func (fn *VetSdf) ProcessElement(rt *VetRTracker, i typex.KV[int, int], emit func(*VetRestriction)) sdf.ProcessContinuation {
 	rest := rt.Rest
-	rest.Key = nil
-	rest.Val = i
+	rest.Key = i.K
+	rest.Val = i.V
 	rest.ProcessElm = true
 	emit(rest)
 	return sdf.ResumeProcessingIn(1 * time.Second)

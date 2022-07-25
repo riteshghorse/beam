@@ -204,8 +204,8 @@ func NewCoGBK(g *Graph, s *Scope, ns []*Node) (*MultiEdge, error) {
 	if len(ns) == 0 {
 		return nil, addContext(errors.New("needs at least 1 input"), s)
 	}
-	if !typex.IsKV(ns[0].Type()) {
-		return nil, addContext(errors.Errorf("input type must be KV: %v", ns[0]), s)
+	if !typex.IsKV(ns[0].Type()) && !typex.IsKVG(ns[0].Type()) {
+		return nil, addContext(errors.Errorf("input type must be KV: %v", ns[0].Type()), s)
 	}
 
 	// (1) Create CoGBK result type: KV<T,U>, .., KV<T,Z> -> CoGBK<T,U,..,Z>.
@@ -217,7 +217,7 @@ func NewCoGBK(g *Graph, s *Scope, ns []*Node) (*MultiEdge, error) {
 
 	for i := 1; i < len(ns); i++ {
 		n := ns[i]
-		if !typex.IsKV(n.Type()) {
+		if !typex.IsKV(n.Type()) && !typex.IsKVG(ns[0].Type()) {
 			return nil, addContext(errors.Errorf("input type must be KV: %v", n), s)
 		}
 		if !n.Coder.Components[0].Equals(c) {
