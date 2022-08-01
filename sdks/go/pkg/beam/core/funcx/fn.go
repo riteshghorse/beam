@@ -20,6 +20,7 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timer"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -82,6 +83,8 @@ const (
 	FnBundleFinalization FnParamKind = 0x800
 	// FnWatermarkEstimator indicates a function input parameter that implements sdf.WatermarkEstimator
 	FnWatermarkEstimator FnParamKind = 0x1000
+	// FnTimerProvider indicates a function input parameter that implements timer.Provider
+	FnTimerProvider FnParamKind = 0x4000
 )
 
 func (k FnParamKind) String() string {
@@ -112,6 +115,8 @@ func (k FnParamKind) String() string {
 		return "BundleFinalization"
 	case FnWatermarkEstimator:
 		return "WatermarkEstimator"
+	case FnTimerProvider:
+		return "TimerProvider"
 	default:
 		return fmt.Sprintf("%v", int(k))
 	}
@@ -300,6 +305,15 @@ func (u *Fn) WatermarkEstimator() (pos int, exists bool) {
 	return -1, false
 }
 
+func (u *Fn) TimerProvider() (pos int, exists bool) {
+	for i, p := range u.Param {
+		if p.Kind == FnTimerProvider {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 // Error returns (index, true) iff the function returns an error.
 func (u *Fn) Error() (pos int, exists bool) {
 	for i, p := range u.Ret {
@@ -380,6 +394,8 @@ func New(fn reflectx.Func) (*Fn, error) {
 			kind = FnRTracker
 		case t.Implements(reflect.TypeOf((*sdf.WatermarkEstimator)(nil)).Elem()):
 			kind = FnWatermarkEstimator
+		case t == timer.ProviderType:
+			kind = FnTimerProvider
 		case typex.IsContainer(t), typex.IsConcrete(t), typex.IsUniversal(t):
 			kind = FnValue
 		case IsEmit(t):
@@ -464,7 +480,7 @@ func SubReturns(list []ReturnParam, indices ...int) []ReturnParam {
 }
 
 // The order of present parameters and return values must be as follows:
-// func(FnContext?, FnPane?, FnWindow?, FnEventTime?, FnWatermarkEstimator?, FnType?, FnBundleFinalization?, FnRTracker?, (FnValue, SideInput*)?, FnEmit*) (RetEventTime?, RetOutput?, RetError?)
+// func(FnContext?, FnPane?, FnWindow?, FnEventTime?, FnWatermarkEstimator?, FnType?, FnBundleFinalization?, FnRTracker?, FnTimerProvider?, (FnValue, SideInput*)?, FnEmit*) (RetEventTime?, RetOutput?, RetError?)
 //     where ? indicates 0 or 1, and * indicates any number.
 //     and  a SideInput is one of FnValue or FnIter or FnReIter
 // Note: Fns with inputs must have at least one FnValue as the main input.
@@ -496,6 +512,7 @@ var (
 	errReflectTypePrecedence             = errors.New("may only have a single reflect.Type parameter and it must precede the main input parameter")
 	errRTrackerPrecedence                = errors.New("may only have a single sdf.RTracker parameter and it must precede the main input parameter")
 	errBundleFinalizationPrecedence      = errors.New("may only have a single BundleFinalization parameter and it must precede the main input parameter")
+	errTimerProviderPrecedence           = errors.New("may only have a single timer.Provider parameter and it must precede the main input parameter")
 	errInputPrecedence                   = errors.New("inputs parameters must precede emit function parameters")
 )
 
@@ -513,6 +530,7 @@ const (
 	psOutput
 	psRTracker
 	psBundleFinalization
+	psTimerProvider
 )
 
 func nextParamState(cur paramState, transition FnParamKind) (paramState, error) {
@@ -535,6 +553,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psContext:
 		switch transition {
@@ -552,6 +572,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psPane:
 		switch transition {
@@ -567,6 +589,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psWindow:
 		switch transition {
@@ -580,6 +604,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psEventTime:
 		switch transition {
@@ -591,6 +617,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psWatermarkEstimator:
 		switch transition {
@@ -600,6 +628,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psType:
 		switch transition {
@@ -607,13 +637,22 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 			return psBundleFinalization, nil
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psBundleFinalization:
 		switch transition {
 		case FnRTracker:
 			return psRTracker, nil
+		case FnTimerProvider:
+			return psTimerProvider, nil
 		}
 	case psRTracker:
+		switch transition {
+		case FnTimerProvider:
+			return psTimerProvider, nil
+		}
+	case psTimerProvider:
 		// Completely handled by the default clause
 	case psInput:
 		switch transition {
@@ -644,6 +683,8 @@ func nextParamState(cur paramState, transition FnParamKind) (paramState, error) 
 		return -1, errBundleFinalizationPrecedence
 	case FnRTracker:
 		return -1, errRTrackerPrecedence
+	case FnTimerProvider:
+		return -1, errTimerProviderPrecedence
 	case FnIter, FnReIter, FnValue, FnMultiMap:
 		return psInput, nil
 	case FnEmit:

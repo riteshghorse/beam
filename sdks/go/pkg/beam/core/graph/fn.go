@@ -21,6 +21,7 @@ import (
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timer"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -172,6 +173,8 @@ const (
 	extractOutputName     = "ExtractOutput"
 	compactName           = "Compact"
 
+	onTimerName = "OnTimer"
+
 	// TODO: ViewFn, etc.
 )
 
@@ -216,6 +219,10 @@ var combineFnNames = []string{
 	mergeAccumulatorsName,
 	extractOutputName,
 	compactName,
+}
+
+var onTimerFnNames = []string{
+	onTimerName,
 }
 
 var lifecycleMethods map[string]struct{}
@@ -280,6 +287,30 @@ func (f *DoFn) IsSplittable() bool {
 	// all be present.
 	_, ok := f.methods[createInitialRestrictionName]
 	return ok
+}
+
+func (f *DoFn) OnTimerFn() (*funcx.Fn, bool) {
+	m, ok := f.methods[onTimerName]
+	return m, ok
+}
+
+func (f *DoFn) PipelineTimers() []timer.PipelineTimer {
+	var t []timer.PipelineTimer
+	if f.Recv == nil {
+		return t
+	}
+
+	v := reflect.Indirect(reflect.ValueOf(f.Recv))
+
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if f.CanInterface() {
+			if pt, ok := f.Interface().(timer.PipelineTimer); ok {
+				t = append(t, pt)
+			}
+		}
+	}
+	return t
 }
 
 // SplittableDoFn represents a DoFn implementing SDF methods.
@@ -561,7 +592,14 @@ func AsDoFn(fn *Fn, numMainIn mainInputs) (*DoFn, error) {
 		}
 	}
 
-	return (*DoFn)(fn), nil
+	doFn := (*DoFn)(fn)
+
+	err = validateTimer(doFn)
+	if err != nil {
+		return nil, addContext(err, fn)
+	}
+
+	return doFn, nil
 }
 
 // validateMainInputs checks that a method has the given number of main inputs
@@ -1218,6 +1256,40 @@ func validateStatefulWatermarkSig(fn *Fn, numMainIn int) error {
 			}
 		}
 	}
+	return nil
+}
+
+func validateTimer(fn *DoFn) error {
+	if fn.Fn == nil {
+		return nil
+	}
+
+	pt := fn.PipelineTimers()
+
+	if _, ok := fn.Fn.TimerProvider(); ok {
+		if len(pt) == 0 {
+			err := errors.Errorf("ProcessElement uses a TimerProvider, but no timer struct-tags are attached to the DoFn")
+			return errors.SetTopLevelMsgf(err, "ProcessElement uses a TimerProvider, but no timer struct-tags are attached to the DoFn"+
+				", Ensure that you are including the timer structs you're using to set/clear global state as uppercase member variables")
+		}
+		timerKeys := make(map[string]timer.PipelineTimer)
+		for _, t := range pt {
+			k := t.TimerKey()
+			if timer, ok := timerKeys[k]; ok {
+				err := errors.Errorf("Duplicate timer key %v", k)
+				return errors.SetTopLevelMsgf(err, "Duplicate timer key %v used by %v and %v. Ensure that keys are unique per DoFn", k, timer, t)
+			} else {
+				timerKeys[k] = t
+			}
+		}
+	} else {
+		if len(pt) > 0 {
+			err := errors.Errorf("ProcessElement doesn't  use a TimerProvider, but Timer Struct is attached to the DoFn: %v", pt)
+			return errors.SetTopLevelMsgf(err, "ProcessElement doesn't  use a TimerProvider, but Timer Struct is attached to the DoFn: %v"+
+				", Ensure that you are using the TimerProvider to set/clear the timers.", pt)
+		}
+	}
+
 	return nil
 }
 
