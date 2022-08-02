@@ -21,7 +21,7 @@ import (
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timer"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -294,8 +294,8 @@ func (f *DoFn) OnTimerFn() (*funcx.Fn, bool) {
 	return m, ok
 }
 
-func (f *DoFn) PipelineTimers() []timer.PipelineTimer {
-	var t []timer.PipelineTimer
+func (f *DoFn) PipelineTimers() []timers.PipelineTimer {
+	var t []timers.PipelineTimer
 	if f.Recv == nil {
 		return t
 	}
@@ -305,7 +305,7 @@ func (f *DoFn) PipelineTimers() []timer.PipelineTimer {
 	for i := 0; i < v.NumField(); i++ {
 		f := v.Field(i)
 		if f.CanInterface() {
-			if pt, ok := f.Interface().(timer.PipelineTimer); ok {
+			if pt, ok := f.Interface().(timers.PipelineTimer); ok {
 				t = append(t, pt)
 			}
 		}
@@ -1272,7 +1272,7 @@ func validateTimer(fn *DoFn) error {
 			return errors.SetTopLevelMsgf(err, "ProcessElement uses a TimerProvider, but no timer struct-tags are attached to the DoFn"+
 				", Ensure that you are including the timer structs you're using to set/clear global state as uppercase member variables")
 		}
-		timerKeys := make(map[string]timer.PipelineTimer)
+		timerKeys := make(map[string]timers.PipelineTimer)
 		for _, t := range pt {
 			k := t.TimerKey()
 			if timer, ok := timerKeys[k]; ok {

@@ -20,7 +20,7 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timer"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -394,7 +394,7 @@ func New(fn reflectx.Func) (*Fn, error) {
 			kind = FnRTracker
 		case t.Implements(reflect.TypeOf((*sdf.WatermarkEstimator)(nil)).Elem()):
 			kind = FnWatermarkEstimator
-		case t == timer.ProviderType:
+		case t == timers.ProviderType:
 			kind = FnTimerProvider
 		case typex.IsContainer(t), typex.IsConcrete(t), typex.IsUniversal(t):
 			kind = FnValue

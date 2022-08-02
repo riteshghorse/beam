@@ -61,6 +61,7 @@ type DataManager interface {
 	OpenRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
 	// OpenWrite opens a closable byte stream for writing.
 	OpenWrite(ctx context.Context, id StreamID) (io.WriteCloser, error)
+	// TODO(riteshghorse): Probably need different methods for timer read and write operations.
 }
 
 // StateReader is the interface for reading side input data.

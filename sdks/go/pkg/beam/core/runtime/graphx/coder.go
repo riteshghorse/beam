@@ -41,10 +41,10 @@ const (
 	urnLengthPrefixCoder        = "beam:coder:length_prefix:v1"
 	urnKVCoder                  = "beam:coder:kv:v1"
 	urnIterableCoder            = "beam:coder:iterable:v1"
+	urnTimerCoder               = "beam:coder:timer:v1"
 	urnStateBackedIterableCoder = "beam:coder:state_backed_iterable:v1"
 	urnWindowedValueCoder       = "beam:coder:windowed_value:v1"
 	urnParamWindowedValueCoder  = "beam:coder:param_windowed_value:v1"
-	urnTimerCoder               = "beam:coder:timer:v1"
 	urnRowCoder                 = "beam:coder:row:v1"
 	urnNullableCoder            = "beam:coder:nullable:v1"
 
@@ -73,7 +73,7 @@ func knownStandardCoders() []string {
 		urnIntervalWindow,
 		urnRowCoder,
 		urnNullableCoder,
-		// TODO(https://github.com/apache/beam/issues/20510): Add urnTimerCoder once finalized.
+		urnTimerCoder,
 	}
 }
 
@@ -538,6 +538,19 @@ func (b *CoderMarshaller) Add(c *coder.Coder) (string, error) {
 		return b.internRowCoder(s), nil
 
 	// TODO(https://github.com/apache/beam/issues/20510): Handle coder.Timer support.
+	case coder.Timer:
+		comp := []string{}
+		if ids, err := b.AddMulti(c.Components); err != nil {
+			return "", errors.SetTopLevelMsgf(err, "failed to marshal timer coder %v", c)
+		} else {
+			comp = append(comp, ids...)
+		}
+		if id, err := b.AddWindowCoder(c.Window); err != nil {
+			return "", errors.Wrapf(err, "failed to marshal window coder %v", c)
+		} else {
+			comp = append(comp, id)
+		}
+		return b.internBuiltInCoder(urnTimerCoder, comp...), nil
 
 	default:
 		err := errors.Errorf("unexpected coder kind: %v", c.Kind)

@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timer"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -351,7 +351,7 @@ func NewT(c *Coder, w *WindowCoder) *Coder {
 	// TODO(https://github.com/apache/beam/issues/20510): Implement proper timer support.
 	return &Coder{
 		Kind:       Timer,
-		T:          typex.New(timer.Type), // TODO(riteshghorse): type in typex package?
+		T:          typex.New(timers.Type), // TODO(riteshghorse): type in typex package?
 		Window:     w,
 		Components: []*Coder{c},
 	}

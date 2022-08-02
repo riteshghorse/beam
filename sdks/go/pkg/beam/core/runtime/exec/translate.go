@@ -405,6 +405,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 		urnTruncateSizedRestrictions:
 		var data string
 		var sides map[string]*pipepb.SideInput
+		var userTimers map[string]*pipepb.TimerFamilySpec
 		switch urn {
 		case graphx.URNParDo,
 			urnPairWithRestriction,
@@ -417,6 +418,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 			}
 			data = string(pardo.GetDoFn().GetPayload())
 			sides = pardo.GetSideInputs()
+			userTimers = pardo.GetTimerFamilySpecs()
 		case urnPerKeyCombinePre, urnPerKeyCombineMerge, urnPerKeyCombineExtract, urnPerKeyCombineConvert:
 			var cmb pipepb.CombinePayload
 			if err := proto.Unmarshal(payload, &cmb); err != nil {
@@ -463,6 +465,23 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 					n.PID = transform.GetUniqueName()
 
 					input := unmarshalKeyedValues(transform.GetInputs())
+					if len(userTimers) > 0 {
+						timerIDToCoder := make(map[string]*coder.Coder)
+						for key, spec := range userTimers {
+							cID := spec.GetTimerFamilyCoderId()
+							c, err := b.coders.Coder(cID)
+							if err != nil {
+								return nil, err
+							}
+							timerIDToCoder[key] = c
+						}
+						sid := StreamID{Port: Port{URL: b.desc.TimerApiServiceDescriptor.GetUrl()}, PtransformID: id.to}
+						ec, wc, err := b.makeCoderForPCollection(input[0])
+						if err != nil {
+							return nil, err
+						}
+						n.Timer = NewUserTimerAdapter(sid, coder.NewT(ec, wc), timerIDToCoder)
+					}
 					for i := 1; i < len(input); i++ {
 						// TODO(https://github.com/apache/beam/issues/18602) Handle ViewFns for side inputs
 
