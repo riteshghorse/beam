@@ -65,6 +65,24 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 	return ch.OpenWrite(ctx, id.PtransformID, s.instID), nil
 }
 
+// OpenTimerRead opens an io.ReadCloser on the given stream for reading timers.
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID, timerID string) (io.ReadCloser, error) {
+	ch, err := s.open(ctx, id.Port)
+	if err != nil {
+		return nil, err
+	}
+	return ch.OpenTimerRead(ctx, id.PtransformID, s.instID, timerID), nil
+}
+
+// OpenTimerWrite opens an io.WriteCloser on the given stream for writing timers.
+func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, timerID string) (io.WriteCloser, error) {
+	ch, err := s.open(ctx, id.Port)
+	if err != nil {
+		return nil, err
+	}
+	return ch.OpenTimerWrite(ctx, id.PtransformID, s.instID, timerID), nil
+}
+
 func (s *ScopedDataManager) open(ctx context.Context, port exec.Port) (*DataChannel, error) {
 	s.mu.Lock()
 	if s.closed {
@@ -134,8 +152,9 @@ func (m *DataChannelManager) closeInstruction(instID instructionID) {
 
 // clientID identifies a client of a connected channel.
 type clientID struct {
-	ptransformID string
-	instID       instructionID
+	ptransformID  string
+	instID        instructionID
+	timerFamilyID string
 }
 
 // This is a reduced version of the full gRPC interface to help with testing.
@@ -226,9 +245,26 @@ func (c *DataChannel) OpenRead(ctx context.Context, ptransformID string, instID 
 	return c.makeReader(ctx, cid)
 }
 
+// OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction, ptransform, and timerID.
+func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID, timerID string) io.ReadCloser {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cid := clientID{ptransformID: ptransformID, instID: instID, timerFamilyID: timerID}
+	if c.readErr != nil {
+		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
+		return &errReader{c.readErr}
+	}
+	return c.makeReader(ctx, cid)
+}
+
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID instructionID) io.WriteCloser {
 	return c.makeWriter(ctx, clientID{ptransformID: ptransformID, instID: instID})
+}
+
+// OpenTimerWrite returns an io.WriteCloser of the data elements for the given instruction, ptransform and timerID.
+func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, timerID string) io.WriteCloser {
+	return c.makeWriter(ctx, clientID{ptransformID: ptransformID, instID: instID, timerFamilyID: timerID})
 }
 
 func (c *DataChannel) read(ctx context.Context) {
@@ -327,6 +363,39 @@ func (c *DataChannel) read(ctx context.Context) {
 				close(r.buf)
 			}
 		}
+
+		for _, elm := range msg.GetTimers() {
+			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
+
+			var r *dataReader
+			if local, ok := cache[id]; ok {
+				r = local
+			} else {
+				c.mu.Lock()
+				r = c.makeReader(ctx, id)
+				c.mu.Unlock()
+				cache[id] = r
+			}
+
+			if r.completed {
+				// The local reader has closed but the remote is still sending data.
+				// Just ignore it. We keep the reader config in the cache so we don't
+				// treat it as a new reader. Eventually the stream will finish and go
+				// through normal teardown.
+				continue
+			}
+
+			// This send is deliberately blocking, if we exceed the buffering for
+			// a reader. We can't buffer the entire main input, if some user code
+			// is slow (or gets stuck). If the local side closes, the reader
+			// will be marked as completed and further remote data will be ignored.
+			select {
+			case r.buf <- elm.GetTimers():
+			case <-r.done:
+				r.completed = true
+				close(r.buf)
+			}
+		}
 	}
 }
 
@@ -342,6 +411,14 @@ func (r *errReader) Close() error {
 	return r.err
 }
 
+func dataID(id clientID) string {
+	readerID := id.ptransformID
+	if len(id.timerFamilyID) > 0 {
+		readerID += ":" + id.timerFamilyID
+	}
+	return readerID
+}
+
 // makeReader creates a dataReader. It expects to be called while c.mu is held.
 func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 	var m map[string]*dataReader
@@ -351,7 +428,9 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 		c.readers[id.instID] = m
 	}
 
-	if r, ok := m[id.ptransformID]; ok {
+	// Timer is identified by a combination of PtransformID+TimerFamilyId
+	readerID := dataID(id)
+	if r, ok := m[readerID]; ok {
 		return r
 	}
 
@@ -367,14 +446,14 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 		return r
 	}
 
-	m[id.ptransformID] = r
+	m[readerID] = r
 	return r
 }
 
 func (c *DataChannel) removeReader(id clientID) {
 	c.mu.Lock()
 	if m, ok := c.readers[id.instID]; ok {
-		delete(m, id.ptransformID)
+		delete(m, dataID(id))
 	}
 	c.mu.Unlock()
 }
@@ -423,7 +502,8 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 		c.writers[id.instID] = m
 	}
 
-	if w, ok := m[id.ptransformID]; ok {
+	writerID := dataID(id)
+	if w, ok := m[writerID]; ok {
 		return w
 	}
 
@@ -432,7 +512,7 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 	// runner or user directed.
 
 	w := &dataWriter{ch: c, id: id}
-	m[id.ptransformID] = w
+	m[writerID] = w
 	return w
 }
 
@@ -507,11 +587,13 @@ func (w *dataWriter) send(msg *fnpb.Elements) error {
 }
 
 func (w *dataWriter) Close() error {
-	// Don't acquire the locks as Flush will do so.
-	l := len(w.buf)
-	err := w.Flush()
-	if err != nil {
-		return errors.Wrapf(err, "dataWriter[%v;%v].Close: error flushing buffer of length %d", w.id, w.ch.id, l)
+	if len(w.id.timerFamilyID) == 0 {
+		// Don't acquire the locks as Flush will do so.
+		l := len(w.buf)
+		err := w.Flush()
+		if err != nil {
+			return errors.Wrapf(err, "dataWriter[%v;%v].Close: error flushing buffer of length %d", w.id, w.ch.id, l)
+		}
 	}
 	// TODO(BEAM-13082): Consider a sync.Pool to reuse < 64MB buffers.
 	// The dataWriter won't be reused, but may be referenced elsewhere.
@@ -522,6 +604,11 @@ func (w *dataWriter) Close() error {
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 	delete(w.ch.writers[w.id.instID], w.id.ptransformID)
+	delete(w.ch.writers[w.id.instID], dataID(w.id))
+	if len(w.id.timerFamilyID) == 0 {
+		// Since IsLast bit for data element only, we don't need to send anything for timers.
+		return nil
+	}
 	msg := &fnpb.Elements{
 		Data: []*fnpb.Elements_Data{
 			{
@@ -561,7 +648,36 @@ func (w *dataWriter) Flush() error {
 	return w.send(msg)
 }
 
+func (w *dataWriter) writeToTimer([]byte) error {
+	if w.buf == nil {
+		return nil
+	}
+	w.ch.mu.Lock()
+	defer w.ch.mu.Unlock()
+
+	msg := &fnpb.Elements{
+		Timers: []*fnpb.Elements_Timers{
+			{
+				InstructionId: string(w.id.instID),
+				TransformId:   w.id.ptransformID,
+				TimerFamilyId: string(w.id.timerFamilyID),
+				Timers:        w.buf,
+			},
+		},
+	}
+	w.buf = w.buf[:0]
+
+	return w.send(msg)
+}
 func (w *dataWriter) Write(p []byte) (n int, err error) {
+	// check if this write is for timer if so then write it immediately
+	if len(w.id.timerFamilyID) > 0 {
+		err = w.writeToTimer(p)
+		if err != nil {
+			return 0, errors.Wrapf(err, "datamgr.go [%v]: error writing timer of length %d", w.id, len(p))
+		}
+		return len(p), nil
+	}
 	if len(w.buf)+len(p) > chunkSize {
 		l := len(w.buf)
 		// We can't fit this message into the buffer. We need to flush the buffer

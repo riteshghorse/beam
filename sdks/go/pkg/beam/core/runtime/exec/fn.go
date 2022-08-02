@@ -85,7 +85,7 @@ type timerProvider struct {
 
 func (t *timerProvider) getWriter(key string) (*io.WriteCloser, error) {
 	if _, ok := t.writersByKey[key]; !ok {
-		w, err := t.dm.OpenWrite(t.ctx, t.SID)
+		w, err := t.dm.OpenTimerWrite(t.ctx, t.SID, key)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func (t *timerProvider) Set(data timers.TimerMetadata) error {
 	enc := MakeElementEncoder(t.codersByKey[data.TimerKey()])
 	err = enc.Encode(&fv, *w)
 	if err != nil {
-		// TODO: wrap with context error
+		// TODO(riteshghorse): wrap with context error
 		return err
 	}
 
