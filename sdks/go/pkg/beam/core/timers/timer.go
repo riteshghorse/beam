@@ -69,7 +69,7 @@ type TimerInfo struct {
 }
 
 type EventTime struct {
-	TimerInfo
+	*TimerInfo
 }
 
 type ProcessingTime struct {

@@ -648,8 +648,8 @@ func (w *dataWriter) Flush() error {
 	return w.send(msg)
 }
 
-func (w *dataWriter) writeToTimer([]byte) error {
-	if w.buf == nil {
+func (w *dataWriter) writeToTimer(p []byte) error {
+	if p == nil {
 		return nil
 	}
 	w.ch.mu.Lock()
@@ -661,11 +661,10 @@ func (w *dataWriter) writeToTimer([]byte) error {
 				InstructionId: string(w.id.instID),
 				TransformId:   w.id.ptransformID,
 				TimerFamilyId: string(w.id.timerFamilyID),
-				Timers:        w.buf,
+				Timers:        p,
 			},
 		},
 	}
-	w.buf = w.buf[:0]
 
 	return w.send(msg)
 }
