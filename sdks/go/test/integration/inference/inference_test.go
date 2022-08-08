@@ -3,6 +3,7 @@ package inference
 import (
 	"flag"
 	"log"
+	"reflect"
 	"testing"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
@@ -19,17 +20,22 @@ func checkFlags(t *testing.T) {
 	}
 }
 
+type TestRow struct {
+	Example   []int64
+	Inference int32
+}
+
 func TestRunInference(t *testing.T) {
 	integration.CheckFilters(t)
 	checkFlags(t)
 
 	// ctx := context.Background()
-	row0 := inference.Schema{Example: []int64{0, 0}, Inference: 0}
-	row1 := inference.Schema{Example: []int64{1, 1}, Inference: 1}
+	row0 := TestRow{Example: []int64{0, 0}, Inference: 0}
+	row1 := TestRow{Example: []int64{1, 1}, Inference: 1}
 
 	p, s := beam.NewPipelineWithRoot()
 
-	inputRow := []inference.Schema{
+	inputRow := []TestRow{
 		{
 			Example: []int64{0, 0},
 		},
@@ -38,10 +44,11 @@ func TestRunInference(t *testing.T) {
 		},
 	}
 	input := beam.CreateList(s, inputRow)
-	kwargs := map[string]string{
-		"model_uri": "/tmp/staged/sklearn_model",
-	}
-	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, kwargs, inference.WithExpansionAddr(expansionAddr))
+	// kwargs := map[string]string{
+	// 	"model_uri": "/tmp/staged/sklearn_model",
+	// }
+	kwargs := inference.Kwargs{ModelURI: "/tmp/staged/sklearn_model"}
+	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, reflect.TypeOf((*TestRow)(nil)).Elem(), inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
 
 	passert.Equals(s, outCol, row0, row1)
 
