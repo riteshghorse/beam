@@ -95,12 +95,30 @@ func (t *timerProvider) getWriter(key string) (*io.WriteCloser, error) {
 	return t.writersByKey[key], nil
 }
 
+type timerProto struct {
+	Key                          []byte // elm type.
+	Tag                          string
+	Windows                      []byte // []typex.Window
+	Clear                        bool
+	FireTimestamp, HoldTimestamp int64
+	Span                         int
+}
+
 func (t *timerProvider) Set(data timers.TimerMetadata) error {
 	w, err := t.getWriter(data.TimerKey())
 	if err != nil {
 		return err
 	}
-	fv := FullValue{Elm: data} // TODO(riteshghorse): update this to timer proto struct.
+
+	timerData := timerProto{
+		Key:           t.elementKey,
+		Tag:           data.Tag,
+		Windows:       t.window,
+		Clear:         data.Clear,
+		FireTimestamp: data.FireTimestamp,
+		HoldTimestamp: data.HoldTimestamp,
+	}
+	fv := FullValue{Elm: timerData}
 
 	enc := MakeElementEncoder(t.codersByKey[data.TimerKey()])
 	err = enc.Encode(&fv, *w)

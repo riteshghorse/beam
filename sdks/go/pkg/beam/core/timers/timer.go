@@ -1,4 +1,4 @@
-// Licensed to the Apache SofiringTimestampware Foundation (ASF) under one or more
+// Licensed to the Apache SoFiringTimestampware Foundation (ASF) under one or more
 // contributor license agreements.  See the NOTICE file distributed with
 // this work for additional information regarding copyright ownership.
 // The ASF licenses this file to You under the Apache License, Version 2.0
@@ -7,7 +7,7 @@
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, sofiringTimestampware
+// Unless required by applicable law or agreed to in writing, soFiringTimestampware
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
@@ -23,7 +23,7 @@ import (
 
 var (
 	ProviderType = reflect.TypeOf((*Provider)(nil)).Elem()
-	Type         = reflect.TypeOf((*TimerInfo)(nil)).Elem() // TODO(riteshghorse): type in typex package?
+	Type         = reflect.TypeOf((*TimerMData)(nil)).Elem() // TODO(riteshghorse): type in typex package?
 )
 
 type TimeDomain_Enum int32
@@ -40,7 +40,7 @@ type PipelineTimer interface {
 }
 
 // required struct format for timer coder
-type timerMData struct {
+type TimerMData struct {
 	Key                          []byte // elm type.
 	Tag                          string
 	Windows                      []byte // []typex.Window
@@ -50,13 +50,16 @@ type timerMData struct {
 }
 
 type TimerMetadata struct {
-	key, tag                     string
-	clear                        bool
-	firetimestamp, holdtimestamp int64
+	Key                          string
+	Tag                          string
+	Windows                      []byte // []typex.Window
+	Clear                        bool
+	FireTimestamp, HoldTimestamp int64
+	Span                         int
 }
 
 func (t *TimerMetadata) TimerKey() string {
-	return t.key
+	return t.Key
 }
 
 type Provider interface {
@@ -64,7 +67,7 @@ type Provider interface {
 }
 
 type TimerInfo struct {
-	key  string
+	Key  string
 	kind TimeDomain_Enum
 }
 
@@ -76,71 +79,71 @@ type ProcessingTime struct {
 	TimerInfo
 }
 
-func MakeEventTimeTimer(key string) *TimerInfo {
+func MakeEventTimeTimer(Key string) *TimerInfo {
 	return &TimerInfo{
-		key:  key,
+		Key:  Key,
 		kind: TimeDomain_EventTime,
 	}
 }
 
-func MakeProcessingTimeTimer(key string) *TimerInfo {
+func MakeProcessingTimeTimer(Key string) *TimerInfo {
 	return &TimerInfo{
-		key:  key,
+		Key:  Key,
 		kind: TimeDomain_ProcessingTime,
 	}
 }
 
 func (t *TimerInfo) TimerKey() string {
-	return t.key
+	return t.Key
 }
 
 func (t *TimerInfo) TimerDomain() TimeDomain_Enum {
 	return TimeDomain_EventTime
 }
 
-func (t *TimerInfo) Set(p Provider, firingTimestamp time.Time) {
+func (t *TimerInfo) Set(p Provider, FiringTimestamp time.Time) {
 	p.Set(TimerMetadata{
-		key:           t.key,
-		firetimestamp: firingTimestamp.Unix(),
+		Key:           t.Key,
+		FireTimestamp: FiringTimestamp.Unix(),
 	})
 }
 
-func (t *TimerInfo) SetWithTag(p Provider, tag string, firingTimestamp time.Time) {
+func (t *TimerInfo) SetWithTag(p Provider, Tag string, FiringTimestamp time.Time) {
 	p.Set(TimerMetadata{
-		key:           t.key,
-		tag:           tag,
-		firetimestamp: firingTimestamp.Unix(),
+		Key:           t.Key,
+		Tag:           Tag,
+		FireTimestamp: FiringTimestamp.Unix(),
 	})
 }
 
-func (t *TimerInfo) SetWithOutputTimestamp(p Provider, firingTimestamp, outputTimestamp time.Time) {
+func (t *TimerInfo) SetWithOutputTimestamp(p Provider, FiringTimestamp, outputTimestamp time.Time) {
 	p.Set(TimerMetadata{
-		key:           t.key,
-		firetimestamp: firingTimestamp.Unix(),
-		holdtimestamp: outputTimestamp.Unix(),
+		Key:           t.Key,
+		FireTimestamp: FiringTimestamp.Unix(),
+		HoldTimestamp: outputTimestamp.Unix(),
 	})
 }
 
-func (t *TimerInfo) SetWithTagAndOutputTimestamp(p Provider, tag string, firingTimestamp, outputTimestamp time.Time) {
+func (t *TimerInfo) SetWithTagAndOutputTimestamp(p Provider, Tag string, FiringTimestamp, outputTimestamp time.Time) {
 	p.Set(TimerMetadata{
-		key:           t.key,
-		tag:           tag,
-		firetimestamp: firingTimestamp.Unix(),
-		holdtimestamp: outputTimestamp.Unix(),
+		Key:           t.Key,
+		Tag:           Tag,
+		FireTimestamp: FiringTimestamp.Unix(),
+		HoldTimestamp: outputTimestamp.Unix(),
 	})
 }
 
 func (t *TimerInfo) Clear(p Provider) {
 	p.Set(TimerMetadata{
-		key:   t.key,
-		clear: true,
+		Key:   t.Key,
+		Clear: true,
 	})
 }
 
-func (t *TimerInfo) ClearTag(p Provider, tag string) {
+func (t *TimerInfo) ClearTag(p Provider, Tag string) {
 	p.Set(TimerMetadata{
-		key:   t.key,
-		tag:   tag,
-		clear: true,
+		Key:   t.Key,
+		Tag:   Tag,
+		Clear: true,
 	})
 }

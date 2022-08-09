@@ -192,6 +192,7 @@ var doFnNames = []string{
 	truncateRestrictionName,
 	initialWatermarkEstimatorStateName,
 	watermarkEstimatorStateName,
+	onTimerName,
 }
 
 var requiredSdfNames = []string{
@@ -219,10 +220,6 @@ var combineFnNames = []string{
 	mergeAccumulatorsName,
 	extractOutputName,
 	compactName,
-}
-
-var onTimerFnNames = []string{
-	onTimerName,
 }
 
 var lifecycleMethods map[string]struct{}

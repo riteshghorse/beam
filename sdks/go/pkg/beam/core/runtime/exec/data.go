@@ -61,9 +61,6 @@ type DataManager interface {
 	OpenRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
 	// OpenWrite opens a closable byte stream for writing.
 	OpenWrite(ctx context.Context, id StreamID) (io.WriteCloser, error)
-	// TODO(riteshghorse): Probably need different methods for timer read and write operations.
-	// OpenTimerRead opens a closable byte stream for reading timer.
-	OpenTimerRead(ctx context.Context, id StreamID, timerFamilyID string) (io.ReadCloser, error)
 	// OpenWriteTimer opens a closable byte stream for writing timer.
 	OpenTimerWrite(ctx context.Context, id StreamID, timerFamilyID string) (io.WriteCloser, error)
 }

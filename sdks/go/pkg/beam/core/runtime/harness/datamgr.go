@@ -65,15 +65,6 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 	return ch.OpenWrite(ctx, id.PtransformID, s.instID), nil
 }
 
-// OpenTimerRead opens an io.ReadCloser on the given stream for reading timers.
-func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID, timerID string) (io.ReadCloser, error) {
-	ch, err := s.open(ctx, id.Port)
-	if err != nil {
-		return nil, err
-	}
-	return ch.OpenTimerRead(ctx, id.PtransformID, s.instID, timerID), nil
-}
-
 // OpenTimerWrite opens an io.WriteCloser on the given stream for writing timers.
 func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, timerID string) (io.WriteCloser, error) {
 	ch, err := s.open(ctx, id.Port)
@@ -367,6 +358,8 @@ func (c *DataChannel) read(ctx context.Context) {
 		for _, elm := range msg.GetTimers() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
 
+			log.Info(context.Background(), "--------- reading timer ---------------------")
+
 			var r *dataReader
 			if local, ok := cache[id]; ok {
 				r = local
@@ -377,6 +370,21 @@ func (c *DataChannel) read(ctx context.Context) {
 				cache[id] = r
 			}
 
+			if elm.GetIsLast() {
+				// If this reader hasn't closed yet, do so now.
+				if !r.completed {
+					// Close buffer to signal EOF.
+					r.completed = true
+					close(r.buf)
+				}
+
+				// Clean up local bookkeeping. We'll never see another message
+				// for it again. We have to be careful not to remove the real
+				// one, because readers may be initialized after we've seen
+				// the full stream.
+				delete(cache, id)
+				continue
+			}
 			if r.completed {
 				// The local reader has closed but the remote is still sending data.
 				// Just ignore it. We keep the reader config in the cache so we don't
@@ -606,8 +614,18 @@ func (w *dataWriter) Close() error {
 	delete(w.ch.writers[w.id.instID], w.id.ptransformID)
 	delete(w.ch.writers[w.id.instID], dataID(w.id))
 	if len(w.id.timerFamilyID) == 0 {
-		// Since IsLast bit for data element only, we don't need to send anything for timers.
-		return nil
+		msg := &fnpb.Elements{
+
+			Timers: []*fnpb.Elements_Timers{
+				{
+					InstructionId: string(w.id.instID),
+					TransformId:   w.id.ptransformID,
+					TimerFamilyId: w.id.timerFamilyID,
+					IsLast:        true,
+				},
+			},
+		}
+		return w.send(msg)
 	}
 	msg := &fnpb.Elements{
 		Data: []*fnpb.Elements_Data{
@@ -652,6 +670,7 @@ func (w *dataWriter) writeToTimer(p []byte) error {
 	if p == nil {
 		return nil
 	}
+	log.Info(context.Background(), "--------- writing timer ---------------------")
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 
