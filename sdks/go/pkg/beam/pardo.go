@@ -23,6 +23,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
@@ -90,6 +91,18 @@ func TryParDo(s Scope, dofn interface{}, col PCollection, opts ...Option) ([]PCo
 	edge, err := graph.NewParDo(s.real, s.scope, fn, in, rc, typedefs)
 	if err != nil {
 		return nil, addParDoCtx(err, s)
+	}
+
+	pipelineTimers := fn.PipelineTimers()
+	if len(pipelineTimers) > 0 {
+		edge.TimerCoders = make(map[string]*coder.Coder)
+		for _, pt := range pipelineTimers {
+			c, err := inferCoder(typex.New(reflect.TypeOf((*timers.TimerMData)(nil)).Elem()))
+			if err != nil {
+				return nil, addParDoCtx(err, s)
+			}
+			edge.TimerCoders[pt.TimerKey()] = c
+		}
 	}
 
 	var ret []PCollection

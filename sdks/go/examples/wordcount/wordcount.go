@@ -73,8 +73,10 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/textio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/register"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/stats"
@@ -119,6 +121,7 @@ var (
 // by calling beam.RegisterFunction in an init() call.
 func init() {
 	register.DoFn3x0[context.Context, string, func(string)](&extractFn{})
+	register.DoFn3x1[timers.Provider, string, int, string](&formatFn{})
 	register.Emitter1[string]()
 }
 
@@ -150,9 +153,21 @@ func (f *extractFn) ProcessElement(ctx context.Context, line string, emit func(s
 	}
 }
 
+type formatFn struct {
+	BasicTimer *timers.EventTimeTimer
+}
+
 // formatFn is a DoFn that formats a word and its count as a string.
-func formatFn(w string, c int) string {
+func (f *formatFn) ProcessElement(t timers.Provider, w string, c int) string {
+	f.BasicTimer.Set(t, time.Now().Add(time.Second*5))
 	return fmt.Sprintf("%s: %v", w, c)
+}
+
+func (f *formatFn) OnTimer(t timers.Provider, timerID string, tagID string, w string, c int, emit func(string)) {
+	switch timerID {
+	case "BasicTimer":
+		emit("BasicTimer has been fired")
+	}
 }
 
 // Concept #4: A composite PTransform is a Go function that adds
@@ -197,7 +212,7 @@ func main() {
 
 	lines := textio.Read(s, *input)
 	counted := CountWords(s, lines)
-	formatted := beam.ParDo(s, formatFn, counted)
+	formatted := beam.ParDo(s, &formatFn{BasicTimer: timers.MakeEventTimeTimer("Baisc Timer")}, counted)
 	textio.Write(s, *output, formatted)
 
 	// Concept #1: The beamx.Run convenience wrapper allows a number of
