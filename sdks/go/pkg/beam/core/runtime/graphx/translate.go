@@ -72,6 +72,8 @@ const (
 	URNRequiresBundleFinalization = "beam:requirement:pardo:finalization:v1"
 	URNTruncate                   = "beam:transform:sdf_truncate_sized_restrictions:v1"
 
+	URNRequiresStatefulProcessing = "beam:requirement:pardo:stateful:v1"
+
 	// Deprecated: Determine worker binary based on GoWorkerBinary Role instead.
 	URNArtifactGoWorker = "beam:artifact:type:go_worker_binary:v1"
 
@@ -456,6 +458,21 @@ func (m *marshaller) addMultiEdge(edge NamedEdge) ([]string, error) {
 		}
 		if _, ok := edge.Edge.DoFn.ProcessElementFn().BundleFinalization(); ok {
 			m.requirements[URNRequiresBundleFinalization] = true
+		}
+		if _, ok := edge.Edge.DoFn.ProcessElementFn().TimerProvider(); ok {
+			m.requirements[URNRequiresStatefulProcessing] = true
+			timerSpecs := make(map[string]*pipepb.TimerFamilySpec)
+			for _, pt := range edge.Edge.DoFn.PipelineTimers() {
+				coderID, err := m.coders.Add(edge.Edge.TimerCoders[pt.TimerKey()])
+				if err != nil {
+					return handleErr(err)
+				}
+				timerSpecs[pt.TimerKey()] = &pipepb.TimerFamilySpec{
+					TimeDomain:         pipepb.TimeDomain_Enum(pt.TimerDomain()),
+					TimerFamilyCoderId: coderID,
+				}
+			}
+			payload.TimerFamilySpecs = timerSpecs
 		}
 		spec = &pipepb.FunctionSpec{Urn: URNParDo, Payload: protox.MustEncode(payload)}
 		annotations = edge.Edge.DoFn.Annotations()
