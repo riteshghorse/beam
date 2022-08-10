@@ -349,15 +349,8 @@ func NewT(c *Coder, w *WindowCoder) *Coder {
 
 	// TODO(https://github.com/apache/beam/issues/20510): Implement proper timer support.
 	return &Coder{
-		Kind: Timer,
-		T: typex.New(reflect.TypeOf((*struct {
-			Key                          []byte // elm type.
-			Tag                          string
-			Windows                      []byte // []typex.Window
-			Clear                        bool
-			FireTimestamp, HoldTimestamp int64
-			Span                         int
-		})(nil)).Elem()),
+		Kind:       Timer,
+		T:          typex.New(typex.TimersType),
 		Window:     w,
 		Components: []*Coder{c},
 	}
