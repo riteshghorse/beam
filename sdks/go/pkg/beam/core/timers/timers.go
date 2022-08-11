@@ -23,7 +23,6 @@ import (
 
 var (
 	ProviderType = reflect.TypeOf((*Provider)(nil)).Elem()
-	Type         = reflect.TypeOf((*TimerMData)(nil)).Elem() // TODO(riteshghorse): define in exec/fn.go
 )
 
 type TimeDomain_Enum int32
@@ -33,16 +32,6 @@ const (
 	TimeDomain_EventTime      TimeDomain_Enum = 1
 	TimeDomain_ProcessingTime TimeDomain_Enum = 2
 )
-
-// TimerMData required struct format for timer coder, needed while writing.
-type TimerMData struct {
-	Key                          []byte // elm type.
-	Tag                          string
-	Windows                      []byte // []typex.Window
-	Clear                        bool
-	FireTimestamp, HoldTimestamp int64
-	Span                         int
-}
 
 type TimerMap struct {
 	Key                          string

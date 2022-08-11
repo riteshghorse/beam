@@ -18,14 +18,17 @@ package exec
 import (
 	"context"
 	"fmt"
+	"io"
 	"reflect"
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 )
@@ -68,6 +71,19 @@ func (bf *bundleFinalizer) RegisterCallback(t time.Duration, cb func() error) {
 	}
 }
 
+type timerProvider struct {
+	dm           DataManager
+	SID          StreamID
+	elementKey   []byte
+	window       []byte
+	writersByKey map[string]*io.WriteCloser
+	codersByKey  map[string]*coder.Coder
+}
+
+func (p *timerProvider) Set(t timers.TimerMap) {
+	// write to timer api
+}
+
 // Invoke invokes the fn with the given values. The extra values must match the non-main
 // side input and emitters. It returns the direct output, if any.
 func Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
@@ -93,9 +109,9 @@ type invoker struct {
 	fn   *funcx.Fn
 	args []interface{}
 	// TODO(lostluck):  2018/07/06 consider replacing with a slice of functions to run over the args slice, as an improvement.
-	ctxIdx, pnIdx, wndIdx, etIdx, bfIdx, weIdx int   // specialized input indexes
-	outEtIdx, outPcIdx, outErrIdx              int   // specialized output indexes
-	in, out                                    []int // general indexes
+	ctxIdx, pnIdx, wndIdx, etIdx, bfIdx, weIdx, tpIdx int   // specialized input indexes
+	outEtIdx, outPcIdx, outErrIdx                     int   // specialized output indexes
+	in, out                                           []int // general indexes
 
 	ret                     FullValue                     // ret is a cached allocation for passing to the next Unit. Units never modify the passed in FullValue.
 	elmConvert, elm2Convert func(interface{}) interface{} // Cached conversion functions, which assums this invoker is always used with the same parameter types.
@@ -137,7 +153,9 @@ func newInvoker(fn *funcx.Fn) *invoker {
 	if n.outPcIdx, ok = fn.ProcessContinuation(); !ok {
 		n.outPcIdx = -1
 	}
-
+	if n.tpIdx, ok = fn.TimerProvider(); !ok {
+		n.tpIdx = -1
+	}
 	n.initCall()
 
 	return n

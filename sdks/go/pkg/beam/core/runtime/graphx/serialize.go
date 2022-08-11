@@ -27,7 +27,6 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime"
 	v1pb "github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/graphx/v1"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/jsonx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
@@ -518,7 +517,7 @@ func tryEncodeSpecial(t reflect.Type) (v1pb.Type_Special, bool) {
 		return v1pb.Type_WINDOW, true
 	case typex.BundleFinalizationType:
 		return v1pb.Type_BUNDLEFINALIZATION, true
-	case timers.Type:
+	case typex.TimersType:
 		return v1pb.Type_TIMERPROVIDER, true
 	case typex.KVType:
 		return v1pb.Type_KV, true
@@ -685,7 +684,7 @@ func decodeSpecial(s v1pb.Type_Special) (reflect.Type, error) {
 	case v1pb.Type_BUNDLEFINALIZATION:
 		return typex.BundleFinalizationType, nil
 	case v1pb.Type_TIMERPROVIDER:
-		return timers.Type, nil
+		return typex.TimersType, nil
 	case v1pb.Type_KV:
 		return typex.KVType, nil
 	case v1pb.Type_COGBK:

@@ -47,6 +47,7 @@ type ParDo struct {
 	bf       *bundleFinalizer
 	we       sdf.WatermarkEstimator
 
+	Timer  UserTimerAdapter
 	reader StateReader
 	cache  *cacheElm
 
