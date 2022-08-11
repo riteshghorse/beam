@@ -72,16 +72,47 @@ func (bf *bundleFinalizer) RegisterCallback(t time.Duration, cb func() error) {
 }
 
 type timerProvider struct {
-	dm           DataManager
+	ctx          context.Context
+	dm           TimerManager
 	SID          StreamID
 	elementKey   []byte
 	window       []byte
+	pn           typex.PaneInfo
 	writersByKey map[string]*io.WriteCloser
 	codersByKey  map[string]*coder.Coder
 }
 
+func (p *timerProvider) getWriter(key string) (*io.WriteCloser, error) {
+	if _, ok := p.writersByKey[key]; !ok {
+		w, err := p.dm.OpenTimerWrite(p.ctx, p.SID, key)
+		if err != nil {
+			return nil, err
+		}
+		p.writersByKey[key] = &w
+	}
+	return p.writersByKey[key], nil
+}
+
 func (p *timerProvider) Set(t timers.TimerMap) {
-	// write to timer api
+	w, err := p.getWriter(t.Key)
+	if err != nil {
+		panic(err)
+	}
+	timerData := typex.Timers{
+		Key:           p.elementKey,
+		Tag:           t.Tag,
+		Windows:       p.window,
+		Clear:         t.Clear,
+		FireTimestamp: t.FireTimestamp,
+		HoldTimestamp: t.HoldTimestamp,
+		PaneInfo:      p.pn,
+	}
+	fv := FullValue{Elm: timerData}
+	enc := MakeElementEncoder(p.codersByKey[t.Key])
+	err = enc.Encode(&fv, *w)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main
@@ -91,7 +122,7 @@ func Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.
 		return nil, nil // ok: nothing to Invoke
 	}
 	inv := newInvoker(fn)
-	return inv.Invoke(ctx, pn, ws, ts, opt, bf, we, extra...)
+	return inv.Invoke(ctx, pn, ws, ts, opt, bf, we, nil, nil, extra...)
 }
 
 // InvokeWithoutEventTime runs the given function at time 0 in the global window.
@@ -172,12 +203,12 @@ func (n *invoker) Reset() {
 
 // InvokeWithoutEventTime runs the function at time 0 in the global window.
 func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
-	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, extra...)
+	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, nil, nil, extra...)
 }
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main
 // side input and emitters. It returns the direct output, if any.
-func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
+func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, dm TimerManager, extra ...interface{}) (*FullValue, error) {
 	// (1) Populate contexts
 	// extract these to make things easier to read.
 	args := n.args
@@ -204,6 +235,14 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 	}
 	if n.weIdx >= 0 {
 		args[n.weIdx] = we
+	}
+	if n.tpIdx >= 0 {
+		tp, err := ta.NewTimerProvider(ctx, dm, ws[0], opt)
+		if err != nil {
+			return nil, err
+		}
+		// n.tp = &tp do we need this
+		args[n.tpIdx] = &tp
 	}
 
 	// (2) Main input from value, if any.

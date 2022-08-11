@@ -63,6 +63,12 @@ type DataManager interface {
 	OpenWrite(ctx context.Context, id StreamID) (io.WriteCloser, error)
 }
 
+type TimerManager interface {
+	DataManager
+	// OpenTimerWrite
+	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
+}
+
 // StateReader is the interface for reading side input data.
 type StateReader interface {
 	// OpenIterableSideInput opens a byte stream for reading iterable side input.

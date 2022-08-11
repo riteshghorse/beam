@@ -25,7 +25,7 @@ import (
 )
 
 type UserTimerAdapter interface {
-	NewTimerProvider(ctx context.Context, manager DataManager, w typex.Window, element interface{}) (timerProvider, error)
+	NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error)
 }
 
 type userTimerAdapter struct {
@@ -55,7 +55,7 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerIDToCoder map[string
 	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerIDToCoder: timerIDToCoder}
 }
 
-func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager DataManager, w typex.Window, element interface{}) (timerProvider, error) {
+func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
 	elementKey, err := EncodeElement(u.kc, element.(*MainInput).Key.Elm)
 	if err != nil {
 		return timerProvider{}, err
@@ -66,6 +66,7 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager DataMan
 		return timerProvider{}, err
 	}
 	tp := timerProvider{
+		ctx:          ctx,
 		dm:           manager,
 		SID:          u.sID,
 		elementKey:   elementKey,
