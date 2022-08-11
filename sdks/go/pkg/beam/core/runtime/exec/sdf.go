@@ -190,7 +190,10 @@ func (n *SplitAndSizeRestrictions) StartBundle(ctx context.Context, id string, d
 func (n *SplitAndSizeRestrictions) ProcessElement(ctx context.Context, elm *FullValue, values ...ReStream) error {
 	rest := elm.Elm2.(*FullValue).Elm
 	ws := elm.Elm2.(*FullValue).Elm2
-	mainElm := elm.Elm.(*FullValue)
+	mainElm := elm
+	if e, ok := elm.Elm.(*FullValue); ok {
+		mainElm = e
+	}
 
 	splitRests := n.splitInv.Invoke(mainElm, rest)
 

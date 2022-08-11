@@ -342,6 +342,63 @@ func (c *DataChannel) read(ctx context.Context) {
 			}
 		}
 
+		for _, elm := range msg.GetTimers() {
+			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
+
+			var r *dataReader
+			if local, ok := cache[id]; ok {
+				r = local
+			} else {
+				c.mu.Lock()
+				r = c.makeReader(ctx, id)
+				c.mu.Unlock()
+				cache[id] = r
+			}
+
+			if elm.GetIsLast() {
+				// If this reader hasn't closed yet, do so now.
+				if !r.completed {
+					// Use the last segment if any.
+					if len(elm.GetTimers()) != 0 {
+						// In case of local side closing, send with select.
+						select {
+						case r.buf <- elm.GetTimers():
+						case <-r.done:
+						}
+					}
+					// Close buffer to signal EOF.
+					r.completed = true
+					close(r.buf)
+				}
+
+				// Clean up local bookkeeping. We'll never see another message
+				// for it again. We have to be careful not to remove the real
+				// one, because readers may be initialized after we've seen
+				// the full stream.
+				delete(cache, id)
+				continue
+			}
+
+			if r.completed {
+				// The local reader has closed but the remote is still sending data.
+				// Just ignore it. We keep the reader config in the cache so we don't
+				// treat it as a new reader. Eventually the stream will finish and go
+				// through normal teardown.
+				continue
+			}
+
+			// This send is deliberately blocking, if we exceed the buffering for
+			// a reader. We can't buffer the entire main input, if some user code
+			// is slow (or gets stuck). If the local side closes, the reader
+			// will be marked as completed and further remote data will be ignored.
+			select {
+			case r.buf <- elm.GetTimers():
+			case <-r.done:
+				r.completed = true
+				close(r.buf)
+			}
+		}
+
 	}
 }
 
