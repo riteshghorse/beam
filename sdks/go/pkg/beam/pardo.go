@@ -104,16 +104,13 @@ func TryParDo(s Scope, dofn interface{}, col PCollection, opts ...Option) ([]PCo
 	default:
 		panic("no window coder found")
 	}
-	if rc == nil {
-		rc = coder.NewBytes() // is it correct?
+	c, err := inferCoder(col.Type())
+	if err != nil {
+		panic(err)
 	}
 	pipelineTimers := fn.PipelineTimers()
 	if len(pipelineTimers) > 0 {
-		edge.TimerCoders = make(map[string]*coder.Coder)
-		for _, pt := range pipelineTimers {
-			c := coder.NewT(rc, wc)
-			edge.TimerCoders[pt.TimerKey()] = c
-		}
+		edge.TimerCoders = coder.NewT(c, wc)
 	}
 
 	var ret []PCollection

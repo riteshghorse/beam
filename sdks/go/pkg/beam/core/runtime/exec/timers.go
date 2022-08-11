@@ -29,15 +29,15 @@ type UserTimerAdapter interface {
 }
 
 type userTimerAdapter struct {
-	sID            StreamID
-	wc             WindowEncoder
-	kc             ElementEncoder
-	ec             ElementDecoder
-	timerIDToCoder map[string]*coder.Coder
-	c              *coder.Coder
+	sID        StreamID
+	wc         WindowEncoder
+	kc         ElementEncoder
+	ec         ElementDecoder
+	timerCoder *coder.Coder
+	c          *coder.Coder
 }
 
-func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerIDToCoder map[string]*coder.Coder) UserTimerAdapter {
+func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoder *coder.Coder) UserTimerAdapter {
 	if !coder.IsW(c) {
 		panic(fmt.Sprintf("expected WV coder for user timer %v: %v", sID, c))
 	}
@@ -52,7 +52,7 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerIDToCoder map[string
 	} else {
 		ec = MakeElementDecoder(coder.SkipW(c))
 	}
-	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerIDToCoder: timerIDToCoder}
+	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerCoder: timerCoder}
 }
 
 func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
@@ -72,7 +72,7 @@ func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMan
 		elementKey:   elementKey,
 		window:       win,
 		writersByKey: make(map[string]*io.WriteCloser),
-		codersByKey:  u.timerIDToCoder,
+		timerCoder:   u.timerCoder,
 	}
 
 	return tp, nil

@@ -79,7 +79,7 @@ type timerProvider struct {
 	window       []byte
 	pn           typex.PaneInfo
 	writersByKey map[string]*io.WriteCloser
-	codersByKey  map[string]*coder.Coder
+	timerCoder   *coder.Coder
 }
 
 func (p *timerProvider) getWriter(key string) (*io.WriteCloser, error) {
@@ -108,7 +108,7 @@ func (p *timerProvider) Set(t timers.TimerMap) {
 		PaneInfo:      p.pn,
 	}
 	fv := FullValue{Elm: timerData}
-	enc := MakeElementEncoder(p.codersByKey[t.Key])
+	enc := MakeElementEncoder(p.timerCoder)
 	err = enc.Encode(&fv, *w)
 	if err != nil {
 		panic(err)

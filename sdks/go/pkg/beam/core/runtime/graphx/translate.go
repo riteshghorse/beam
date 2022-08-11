@@ -463,7 +463,7 @@ func (m *marshaller) addMultiEdge(edge NamedEdge) ([]string, error) {
 			m.requirements[URNRequiresStatefulProcessing] = true
 			timerSpecs := make(map[string]*pipepb.TimerFamilySpec)
 			for _, pt := range edge.Edge.DoFn.PipelineTimers() {
-				coderID, err := m.coders.Add(edge.Edge.TimerCoders[pt.TimerKey()])
+				coderID, err := m.coders.Add(edge.Edge.TimerCoders)
 				if err != nil {
 					return handleErr(err)
 				}
