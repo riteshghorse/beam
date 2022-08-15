@@ -35,12 +35,16 @@ import (
 
 type Kwargs struct {
 	ModelHandlerProvider string `beam:"model_handler_provider"`
-	ModelURI             string `beam:"model_uri`
+	ModelURI             string `beam:"ModelURI"`
 }
-type payload struct {
-	Constructor string            `beam:"constructor"`
-	Args        map[string]string `beam:"args"`
-	Kwargs      Kwargs            `beam:"kwargs"`
+
+type Args struct {
+	args []string
+}
+type Payload struct {
+	Constructor string `beam:"constructor"`
+	Args        Args   `beam:"args"`
+	Kwargs      Kwargs `beam:"kwargs"`
 }
 
 // func (p *payload) addKwargs(key string, value string) {
@@ -48,7 +52,7 @@ type payload struct {
 // }
 
 type config struct {
-	pyld          payload
+	pyld          Payload
 	expansionAddr string
 }
 
@@ -62,9 +66,9 @@ func WithKwarg(kwargs Kwargs) configOption {
 }
 
 // Sets arguments for the python transform parameters
-func WithArgs(args map[string]string) configOption {
+func WithArgs(args []string) configOption {
 	return func(c *config) {
-		c.pyld.Args = args
+		c.pyld.Args = Args{args: args}
 	}
 }
 
@@ -79,9 +83,9 @@ func WithExpansionAddr(expansionAddr string) configOption {
 func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("ml.inference.RunInference")
 
-	riPyld := &payload{
+	riPyld := &Payload{
 		Constructor: "apache_beam.ml.inference.base.RunInference.from_callable",
-		Args:        make(map[string]string),
+		Args:        Args{},
 		Kwargs:      Kwargs{},
 	}
 	// riPyld.addKwargs("model_handler_provider", modelLoader)
