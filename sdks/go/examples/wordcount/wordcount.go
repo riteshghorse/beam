@@ -212,7 +212,7 @@ func main() {
 
 	lines := textio.Read(s, *input)
 	counted := CountWords(s, lines)
-	formatted := beam.ParDo(s, &formatFn{BasicTimer: timers.MakeEventTimeTimer("Baisc Timer")}, counted)
+	formatted := beam.ParDo(s, &formatFn{BasicTimer: timers.MakeEventTimeTimer("Baisc")}, counted)
 	textio.Write(s, *output, formatted)
 
 	// Concept #1: The beamx.Run convenience wrapper allows a number of

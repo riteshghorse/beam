@@ -93,7 +93,7 @@ func (p *timerProvider) getWriter(key string) (*io.WriteCloser, error) {
 	return p.writersByKey[key], nil
 }
 
-func (p *timerProvider) Set(t timers.TimerMap) {
+func (p timerProvider) Set(t timers.TimerMap) {
 	w, err := p.getWriter(t.Key)
 	if err != nil {
 		panic(err)
@@ -139,6 +139,7 @@ func InvokeWithoutEventTime(ctx context.Context, fn *funcx.Fn, opt *MainInput, b
 type invoker struct {
 	fn   *funcx.Fn
 	args []interface{}
+	tp   timerProvider
 	// TODO(lostluck):  2018/07/06 consider replacing with a slice of functions to run over the args slice, as an improvement.
 	ctxIdx, pnIdx, wndIdx, etIdx, bfIdx, weIdx, tpIdx int   // specialized input indexes
 	outEtIdx, outPcIdx, outErrIdx                     int   // specialized output indexes
@@ -237,14 +238,24 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 		args[n.weIdx] = we
 	}
 	if n.tpIdx >= 0 {
-		tp, err := ta.NewTimerProvider(ctx, dm, ws[0], opt)
+		// if ta != nil {
+
+		tp, err := ta.NewTimerProvider(ctx, dm, window.GlobalWindow{}, opt)
 		if err != nil {
 			return nil, err
 		}
-		// n.tp = &tp do we need this
-		args[n.tpIdx] = &tp
-	}
+		n.tp = tp //do we need this
+		args[n.tpIdx] = tp
+		// } else {
+		// 	tp := timerProvider{ctx: ctx, dm: dm}
+		// 	n.tp = tp //do we need this
+		// 	args[n.tpIdx] = tp
+		// }
 
+		// } else {
+		// 	n.tp := timerProvider{ctx: ctx, dm: dm}
+		// }
+	}
 	// (2) Main input from value, if any.
 	i := 0
 	if opt != nil {

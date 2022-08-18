@@ -465,7 +465,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 
 					input := unmarshalKeyedValues(transform.GetInputs())
 					if len(userTimers) > 0 {
-						panic(b.desc.TimerApiServiceDescriptor.GetUrl())
+						// panic(b.desc.TimerApiServiceDescriptor.GetUrl())
 						sID := StreamID{Port: Port{URL: b.desc.TimerApiServiceDescriptor.GetUrl()}, PtransformID: id.to}
 
 						ec, wc, err := b.makeCoderForPCollection(input[0])
