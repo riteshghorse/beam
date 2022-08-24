@@ -89,8 +89,8 @@ func (e ProcessingTimeTimer) TimerDomain() TimeDomain_Enum {
 	return e.timerSpec.(timerInfo).kind
 }
 
-func MakeEventTimeTimer(Key string) *EventTimeTimer {
-	return &EventTimeTimer{timerInfo{key: Key, kind: TimeDomain_EventTime}}
+func MakeEventTimeTimer(Key string) EventTimeTimer {
+	return EventTimeTimer{timerInfo{key: Key, kind: TimeDomain_EventTime}}
 }
 
 func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {

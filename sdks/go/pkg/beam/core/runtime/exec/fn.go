@@ -117,21 +117,21 @@ func (p timerProvider) Set(t timers.TimerMap) {
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main
 // side input and emitters. It returns the direct output, if any.
-func Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
+func Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
 	if fn == nil {
 		return nil, nil // ok: nothing to Invoke
 	}
 	inv := newInvoker(fn)
-	return inv.Invoke(ctx, pn, ws, ts, opt, bf, we, nil, nil, extra...)
+	return inv.Invoke(ctx, pn, ws, ts, opt, bf, we, ta, tm, extra...)
 }
 
 // InvokeWithoutEventTime runs the given function at time 0 in the global window.
-func InvokeWithoutEventTime(ctx context.Context, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
+func InvokeWithoutEventTime(ctx context.Context, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
 	if fn == nil {
 		return nil, nil // ok: nothing to Invoke
 	}
 	inv := newInvoker(fn)
-	return inv.InvokeWithoutEventTime(ctx, opt, bf, we, extra...)
+	return inv.InvokeWithoutEventTime(ctx, opt, bf, we, ta, tm, extra...)
 }
 
 // invoker is a container struct for hot path invocations of DoFns, to avoid
@@ -203,8 +203,8 @@ func (n *invoker) Reset() {
 }
 
 // InvokeWithoutEventTime runs the function at time 0 in the global window.
-func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, extra ...interface{}) (*FullValue, error) {
-	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, nil, nil, extra...)
+func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
+	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, ta, tm, extra...)
 }
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main

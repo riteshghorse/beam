@@ -42,6 +42,7 @@ func (id StreamID) String() string {
 type DataContext struct {
 	Data  DataManager
 	State StateReader
+	Timer TimerManager
 }
 
 // SideCache manages cached ReStream values for side inputs that can be re-used across

@@ -26,6 +26,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/graphx"
 	v1pb "github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/graphx/v1"
+
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/protox"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -473,6 +474,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 							return nil, err
 						}
 						n.Timer = NewUserTimerAdapter(sID, coder.NewW(ec, wc), coder.NewT(ec, wc))
+						// n.timerManager =ScopedDataManager{}
 					}
 					for i := 1; i < len(input); i++ {
 						// TODO(https://github.com/apache/beam/issues/18602) Handle ViewFns for side inputs

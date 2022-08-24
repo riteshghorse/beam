@@ -342,7 +342,7 @@ func (c *DataChannel) read(ctx context.Context) {
 			}
 		}
 
-		/*for _, elm := range msg.GetTimers() {
+		for _, elm := range msg.GetTimers() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
 
 			var r *dataReader
@@ -397,7 +397,7 @@ func (c *DataChannel) read(ctx context.Context) {
 				r.completed = true
 				close(r.buf)
 			}
-		}*/
+		}
 
 	}
 }
