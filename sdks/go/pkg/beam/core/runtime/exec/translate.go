@@ -472,7 +472,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 						if err != nil {
 							return nil, err
 						}
-						n.Timer = NewUserTimerAdapter(sID, coder.NewT(ec, wc), coder.NewT(ec, wc))
+						n.Timer = NewUserTimerAdapter(sID, coder.NewW(ec, wc), coder.NewT(ec, wc))
 					}
 					for i := 1; i < len(input); i++ {
 						// TODO(https://github.com/apache/beam/issues/18602) Handle ViewFns for side inputs
