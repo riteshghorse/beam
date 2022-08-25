@@ -25,12 +25,12 @@ var (
 	ProviderType = reflect.TypeOf((*Provider)(nil)).Elem()
 )
 
-type TimeDomain_Enum int32
+type TimeDomainEnum int32
 
 const (
-	TimeDomain_Unspecified    TimeDomain_Enum = 0
-	TimeDomain_EventTime      TimeDomain_Enum = 1
-	TimeDomain_ProcessingTime TimeDomain_Enum = 2
+	TimeDomainUnspecified    TimeDomainEnum = 0
+	TimeDomainEventTime      TimeDomainEnum = 1
+	TimeDomainProcessingTime TimeDomainEnum = 2
 )
 
 type TimerMap struct {
@@ -50,31 +50,34 @@ type timerSpec interface {
 
 type timerInfo struct {
 	key  string
-	kind TimeDomain_Enum
+	kind TimeDomainEnum
 }
 
 func (t timerInfo) Set(p Provider, FiringTimestamp time.Time) {
-	p.Set(TimerMap{
-		Key:           t.key,
-		FireTimestamp: FiringTimestamp.Unix(),
-	})
+	p.Set(TimerMap{Key: t.key, FireTimestamp: FiringTimestamp.Unix()})
 }
 
 type PipelineTimer interface {
 	TimerKey() string
-	TimerDomain() TimeDomain_Enum
+	TimerDomain() TimeDomainEnum
 }
 
 type EventTimeTimer struct {
-	timerSpec
+	// need to export them otherwise the key comes out empty in execution?
+	Key  string
+	Kind TimeDomainEnum
+}
+
+func (t EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
+	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.Unix()})
 }
 
 func (e EventTimeTimer) TimerKey() string {
-	return e.timerSpec.(timerInfo).key
+	return e.Key
 }
 
-func (e EventTimeTimer) TimerDomain() TimeDomain_Enum {
-	return e.timerSpec.(timerInfo).kind
+func (e EventTimeTimer) TimerDomain() TimeDomainEnum {
+	return e.Kind
 }
 
 type ProcessingTimeTimer struct {
@@ -85,14 +88,14 @@ func (e ProcessingTimeTimer) TimerKey() string {
 	return e.timerSpec.(timerInfo).key
 }
 
-func (e ProcessingTimeTimer) TimerDomain() TimeDomain_Enum {
+func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
 	return e.timerSpec.(timerInfo).kind
 }
 
 func MakeEventTimeTimer(Key string) EventTimeTimer {
-	return EventTimeTimer{timerInfo{key: Key, kind: TimeDomain_EventTime}}
+	return EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }
 
 func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
-	return ProcessingTimeTimer{timerInfo{key: Key, kind: TimeDomain_ProcessingTime}}
+	return ProcessingTimeTimer{timerInfo{key: Key, kind: TimeDomainProcessingTime}}
 }

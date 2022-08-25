@@ -71,6 +71,7 @@ func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID
 	if err != nil {
 		return nil, err
 	}
+	// log.Fatalf(ctx, "key at the start: %v", key)
 	return ch.OpenTimerWrite(ctx, id.PtransformID, s.instID, key), nil
 }
 
@@ -243,8 +244,10 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.WriteCloser {
+	// log.Fatalf(ctx, "tfd: %v", key) -- key is coming out empty string
 	return c.makeWriter(ctx, clientID{timerFamilyID: key, ptransformID: ptransformID, instID: instID})
 }
+
 func (c *DataChannel) read(ctx context.Context) {
 	cache := make(map[clientID]*dataReader)
 	for {
@@ -343,6 +346,10 @@ func (c *DataChannel) read(ctx context.Context) {
 		}
 
 		for _, elm := range msg.GetTimers() {
+			// if len(elm.GetTimers()) > 0 {
+			// 	log.Fatalf(ctx, "timers : %#v", elm.GetTimers())
+			// }
+			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
 
 			var r *dataReader
@@ -512,7 +519,12 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 	// runner or user directed.
 
 	w := &dataWriter{ch: c, id: id}
-	m[id.ptransformID] = w
+	// log.Fatalf(ctx, "client id: %#v", id)
+	// if id.timerFamilyID != "" {
+	// 	log.Fatalf(ctx, "client id: %#v", id)
+	// }
+	m[makeID(id)] = w
+
 	return w
 }
 
@@ -658,6 +670,7 @@ func (w *dataWriter) Flush() error {
 }
 
 func (w *dataWriter) writeTimers(p []byte) error {
+	// log.Fatal(context.Background(), "dataWriter writing timers") - didn't reach here
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 	msg := &fnpb.Elements{
@@ -666,14 +679,16 @@ func (w *dataWriter) writeTimers(p []byte) error {
 				InstructionId: string(w.id.instID),
 				TransformId:   w.id.ptransformID,
 				TimerFamilyId: w.id.timerFamilyID,
-				Timers:        w.buf,
+				Timers:        p,
 			},
 		},
 	}
 	return w.send(msg)
 }
 func (w *dataWriter) Write(p []byte) (n int, err error) {
+	// log.Fatal(context.Background(), "dataWriter write") -- success
 	if w.id.timerFamilyID != "" {
+		// log.Fatal(context.Background(), "dataWriter timer") //--didn;t reach. May be timerFamilyID is not getting set, need to export timer fields
 		if err := w.writeTimers(p); err != nil {
 			return 0, err
 		}

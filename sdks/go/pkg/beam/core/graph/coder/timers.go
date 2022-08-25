@@ -22,14 +22,15 @@ import (
 )
 
 // EncodeTimer encodes a typex.PaneInfo.
-func EncodeTimer(tm typex.Timers, w io.Writer) error {
-	w.Write(tm.Key)
+func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
+	EncodeStringUTF8(tm.Key, w)
 	EncodeStringUTF8(tm.Tag, w)
-	w.Write(tm.Windows)
+	EncodeBytes(tm.Windows, w)
 	EncodeBool(tm.Clear, w)
 	EncodeVarInt(tm.FireTimestamp-(-9223372036854775808), w)
 	EncodeVarInt(tm.HoldTimestamp-(-9223372036854775808), w)
 	EncodePane(tm.PaneInfo, w)
+	// log.Fatal(context.Background(), "encoding timer successfully")
 	return nil
 }
 

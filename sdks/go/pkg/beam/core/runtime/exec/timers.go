@@ -52,7 +52,7 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoder *coder.Coder) 
 	} else {
 		ec = MakeElementDecoder(coder.SkipW(c))
 	}
-	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerCoder: timerCoder}
+	return userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerCoder: timerCoder}
 }
 
 func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {

@@ -98,6 +98,14 @@ type Timers struct {
 	PaneInfo                     PaneInfo
 }
 
+type TimerMap struct {
+	Key, Tag                     string
+	Windows                      []byte // []typex.Window
+	Clear                        bool
+	FireTimestamp, HoldTimestamp int64
+	PaneInfo                     PaneInfo
+}
+
 // KV, Nullable, CoGBK, WindowedValue represent composite generic types. They are not used
 // directly in user code signatures, but only in FullTypes.
 
