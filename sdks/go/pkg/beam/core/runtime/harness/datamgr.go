@@ -346,9 +346,6 @@ func (c *DataChannel) read(ctx context.Context) {
 		}
 
 		for _, elm := range msg.GetTimers() {
-			// if len(elm.GetTimers()) > 0 {
-			// 	log.Fatalf(ctx, "timers : %#v", elm.GetTimers())
-			// }
 			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
 

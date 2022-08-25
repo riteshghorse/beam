@@ -25,7 +25,7 @@ import (
 func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
 	EncodeStringUTF8(tm.Key, w)
 	EncodeStringUTF8(tm.Tag, w)
-	EncodeBytes(tm.Windows, w)
+	w.Write(tm.Windows)
 	EncodeBool(tm.Clear, w)
 	EncodeVarInt(tm.FireTimestamp-(-9223372036854775808), w)
 	EncodeVarInt(tm.HoldTimestamp-(-9223372036854775808), w)
@@ -35,45 +35,38 @@ func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
 }
 
 // DecodeTimer decodes a single byte.
-func DecodeTimer(r io.Reader) (typex.Timers, error) {
-	tm := typex.Timers{}
-	// var err error
-	if b, err := DecodeBytes(r); err != nil {
+func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
+	tm := typex.TimerMap{}
+	if b, err := DecodeStringUTF8(r); err != nil {
 		return tm, err
 	} else {
 		tm.Key = b
 	}
-
 	if s, err := DecodeStringUTF8(r); err != nil {
 		return tm, nil
 	} else {
 		tm.Tag = s
 	}
-
 	if w, err := DecodeBytes(r); err != nil {
 		return tm, nil
 	} else {
 		tm.Windows = w
 	}
-
 	if c, err := DecodeBool(r); err != nil {
 		return tm, nil
 	} else {
 		tm.Clear = c
 	}
-
 	if ft, err := DecodeVarInt(r); err != nil {
 		return tm, nil
 	} else {
 		tm.FireTimestamp = ft
 	}
-
 	if ht, err := DecodeVarInt(r); err != nil {
 		return tm, nil
 	} else {
 		tm.HoldTimestamp = ht
 	}
-
 	if pn, err := DecodePane(r); err != nil {
 		return tm, nil
 	} else {

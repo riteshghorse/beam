@@ -144,7 +144,7 @@ func MakeElementEncoder(c *coder.Coder) ElementEncoder {
 
 	case coder.Timer:
 		return &timerEncoder{
-			// elm: MakeElementEncoder(c.Components[0]),
+			elm: MakeElementEncoder(c.Components[0]),
 		}
 
 	case coder.Row:
@@ -261,7 +261,7 @@ func MakeElementDecoder(c *coder.Coder) ElementDecoder {
 
 	case coder.Timer:
 		return &timerDecoder{
-			// elm: MakeElementDecoder(c.Components[0]),
+			elm: MakeElementDecoder(c.Components[0]),
 		}
 
 	case coder.Row:
@@ -889,7 +889,7 @@ func (d *paramWindowedValueDecoder) Decode(r io.Reader) (*FullValue, error) {
 }
 
 type timerEncoder struct {
-	// elm ElementEncoder
+	elm ElementEncoder
 }
 
 func (e *timerEncoder) Encode(val *FullValue, w io.Writer) error {
@@ -897,7 +897,7 @@ func (e *timerEncoder) Encode(val *FullValue, w io.Writer) error {
 }
 
 type timerDecoder struct {
-	// elm ElementDecoder
+	elm ElementDecoder
 }
 
 func (d *timerDecoder) DecodeTo(r io.Reader, fv *FullValue) error {
