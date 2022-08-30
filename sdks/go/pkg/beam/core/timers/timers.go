@@ -17,8 +17,11 @@
 package timers
 
 import (
+	"context"
 	"reflect"
 	"time"
+
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 var (
@@ -44,19 +47,6 @@ type Provider interface {
 	Set(t TimerMap)
 }
 
-type timerSpec interface {
-	Set(p Provider, FiringTimestamp time.Time)
-}
-
-type timerInfo struct {
-	key  string
-	kind TimeDomainEnum
-}
-
-func (t timerInfo) Set(p Provider, FiringTimestamp time.Time) {
-	p.Set(TimerMap{Key: t.key, FireTimestamp: FiringTimestamp.Unix()})
-}
-
 type PipelineTimer interface {
 	TimerKey() string
 	TimerDomain() TimeDomainEnum
@@ -68,7 +58,8 @@ type EventTimeTimer struct {
 	Kind TimeDomainEnum
 }
 
-func (t EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
+func (t *EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
+	log.Infof(context.Background(), "setting timer at event time")
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.Unix()})
 }
 
@@ -80,22 +71,22 @@ func (e EventTimeTimer) TimerDomain() TimeDomainEnum {
 	return e.Kind
 }
 
-type ProcessingTimeTimer struct {
-	timerSpec
-}
+// type ProcessingTimeTimer struct {
+// 	timerSpec
+// }
 
-func (e ProcessingTimeTimer) TimerKey() string {
-	return e.timerSpec.(timerInfo).key
-}
+// func (e ProcessingTimeTimer) TimerKey() string {
+// 	return e.timerSpec.(timerInfo).key
+// }
 
-func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
-	return e.timerSpec.(timerInfo).kind
-}
+// func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
+// 	return e.timerSpec.(timerInfo).kind
+// }
 
 func MakeEventTimeTimer(Key string) EventTimeTimer {
 	return EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }
 
-func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
-	return ProcessingTimeTimer{timerInfo{key: Key, kind: TimeDomainProcessingTime}}
-}
+// func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
+// 	return ProcessingTimeTimer{timerInfo{key: Key, kind: TimeDomainProcessingTime}}
+// }

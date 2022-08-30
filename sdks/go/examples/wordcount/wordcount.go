@@ -70,7 +70,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -78,6 +77,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/textio"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/register"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
 )
@@ -120,7 +120,7 @@ var (
 // by calling beam.RegisterFunction in an init() call.
 func init() {
 	register.DoFn3x0[context.Context, string, func(string, int)](&extractFn{})
-	register.DoFn3x1[timers.Provider, string, int, string](&formatFn{})
+	register.DoFn4x1[context.Context, timers.Provider, string, int, string](&formatFn{})
 	register.Emitter2[string, int]()
 }
 
@@ -157,8 +157,11 @@ type formatFn struct {
 }
 
 // formatFn is a DoFn that formats a word and its count as a string.
-func (f *formatFn) ProcessElement(t timers.Provider, w string, c int) string {
+func (f *formatFn) ProcessElement(ctx context.Context, t timers.Provider, w string, c int) string {
+	log.Infof(ctx, "setting timer: %v", f.BasicTimer)
 	f.BasicTimer.Set(t, time.Now().Add(time.Second*5))
+	time.Sleep(time.Second * 15)
+
 	return fmt.Sprintf("%s: %v", w, c)
 }
 
@@ -195,10 +198,11 @@ func main() {
 	// beam.Init() is an initialization hook that must be called on startup. On
 	// distributed runners, it is used to intercept control.
 	beam.Init()
+	ctx := context.Background()
 
 	// Input validation is done as usual. Note that it must be after Init().
 	if *output == "" {
-		log.Fatal("No output provided")
+		log.Fatal(ctx, "No output provided")
 	}
 
 	// Concepts #3 and #4: The pipeline uses the named transform and DoFn.
@@ -208,11 +212,12 @@ func main() {
 	lines := textio.Read(s, *input)
 	counted := CountWords(s, lines)
 	formatted := beam.ParDo(s, &formatFn{BasicTimer: timers.MakeEventTimeTimer("NormalTimers")}, counted)
+	// time.Sleep(time.Second * 15)
 	textio.Write(s, *output, formatted)
 
 	// Concept #1: The beamx.Run convenience wrapper allows a number of
 	// pre-defined runners to be used via the --runner flag.
-	if err := beamx.Run(context.Background(), p); err != nil {
-		log.Fatalf("Failed to execute job: %v", err)
+	if err := beamx.Run(ctx, p); err != nil {
+		log.Fatalf(ctx, "Failed to execute job: %v", err)
 	}
 }

@@ -104,6 +104,7 @@ func TryParDo(s Scope, dofn interface{}, col PCollection, opts ...Option) ([]PCo
 	default:
 		panic("no window coder found")
 	}
+	// str := ""
 	c, err := inferCoder(col.Type())
 	if err != nil {
 		panic(err)

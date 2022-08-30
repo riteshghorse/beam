@@ -893,7 +893,7 @@ type timerEncoder struct {
 }
 
 func (e *timerEncoder) Encode(val *FullValue, w io.Writer) error {
-	return coder.EncodeTimer(val.Elm.(typex.TimerMap), w)
+	return coder.EncodeTimer(val.Elm.(typex.Timers), w)
 }
 
 type timerDecoder struct {

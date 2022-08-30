@@ -44,35 +44,42 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoder *coder.Coder) 
 
 	wc := MakeWindowEncoder(c.Window)
 	var kc ElementEncoder
-	var ec ElementDecoder
+	// var ec ElementDecoder
 
 	if coder.IsKV(coder.SkipW(c)) {
+		// 	log.Fatal("coder is KV")
 		kc = MakeElementEncoder(coder.SkipW(c).Components[0])
-		ec = MakeElementDecoder(coder.SkipW(c).Components[1])
-	} else {
-		ec = MakeElementDecoder(coder.SkipW(c))
 	}
-	return userTimerAdapter{sID: sID, wc: wc, kc: kc, ec: ec, c: c, timerCoder: timerCoder}
+	// ec = MakeElementDecoder(coder.SkipW(timerCoder).Components[1])
+	// } else {
+	// 	ec = MakeElementDecoder(coder.SkipW(timerCoder))
+	// }
+
+	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, c: c, timerCoder: timerCoder}
 }
 
-func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
+func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
+	if u.kc == nil {
+		return timerProvider{}, fmt.Errorf("cannot make a state provider for an unkeyed input %v", element)
+	}
 	elementKey, err := EncodeElement(u.kc, element.(*MainInput).Key.Elm)
 	if err != nil {
 		return timerProvider{}, err
 	}
-
 	win, err := EncodeWindow(u.wc, w)
 	if err != nil {
 		return timerProvider{}, err
 	}
 	tp := timerProvider{
-		ctx:          ctx,
-		dm:           manager,
-		SID:          u.sID,
-		elementKey:   elementKey,
-		window:       win,
-		writersByKey: make(map[string]*io.WriteCloser),
-		timerCoder:   u.timerCoder,
+		ctx:            ctx,
+		dm:             manager,
+		SID:            u.sID,
+		elementKey:     elementKey,
+		elementEncoder: u.kc,
+		elementDecoder: u.ec,
+		window:         win,
+		writersByKey:   make(map[string]io.WriteCloser),
+		timerCoder:     u.timerCoder,
 	}
 
 	return tp, nil
