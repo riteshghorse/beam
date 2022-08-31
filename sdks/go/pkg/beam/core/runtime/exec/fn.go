@@ -18,20 +18,16 @@ package exec
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 //go:generate specialize --input=fn_arity.tmpl
@@ -69,61 +65,6 @@ func (bf *bundleFinalizer) RegisterCallback(t time.Duration, cb func() error) {
 	bf.callbacks = append(bf.callbacks, callback)
 	if bf.lastValidCallback.Before(callback.validUntil) {
 		bf.lastValidCallback = callback.validUntil
-	}
-}
-
-type timerProvider struct {
-	ctx            context.Context
-	dm             TimerManager
-	SID            StreamID
-	window         []byte
-	pn             typex.PaneInfo
-	elementKey     []byte
-	elementDecoder ElementDecoder
-	writersByKey   map[string]io.WriteCloser
-	elementEncoder ElementEncoder
-	timerCoder     *coder.Coder
-}
-
-func (p *timerProvider) getWriter(key string) (io.WriteCloser, error) {
-	if _, ok := p.writersByKey[key]; !ok {
-		w, err := p.dm.OpenTimerWrite(p.ctx, p.SID, key)
-		// log.Fatal(context.Background(), "created writer")
-		if err != nil {
-			return nil, err
-		}
-		p.writersByKey[key] = w
-	}
-	return p.writersByKey[key], nil
-}
-
-func (p timerProvider) Set(t timers.TimerMap) {
-	log.Infof(context.Background(), "getting writer for timer")
-	w, err := p.getWriter(t.Key)
-	if err != nil {
-		panic(err)
-	}
-	log.Infof(context.Background(), "got writer for timer")
-	ek, err := EncodeElement(p.elementEncoder, t.Key)
-	if err != nil {
-		panic(err)
-	}
-	log.Infof(context.Background(), "encoded for timer")
-	timerData := typex.Timers{
-		Key:           ek,
-		Tag:           t.Tag,
-		Windows:       p.window,
-		Clear:         t.Clear,
-		FireTimestamp: t.FireTimestamp,
-		HoldTimestamp: t.HoldTimestamp,
-		PaneInfo:      p.pn,
-	}
-	fv := FullValue{Elm: timerData}
-	enc := MakeElementEncoder(coder.SkipW(p.timerCoder))
-	err = enc.Encode(&fv, w)
-	log.Infof(context.Background(), "written for timer")
-	if err != nil {
-		panic(err)
 	}
 }
 
@@ -250,7 +191,7 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 		args[n.weIdx] = we
 	}
 	if n.tpIdx >= 0 {
-		tp, err := ta.NewTimerProvider(ctx, dm, ws[0], opt)
+		tp, err := ta.NewTimerProvider(ctx, dm, ws, opt)
 		if err != nil {
 			return nil, err
 		}

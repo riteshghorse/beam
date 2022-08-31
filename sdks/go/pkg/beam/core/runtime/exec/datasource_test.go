@@ -868,6 +868,14 @@ func (dm *TestDataManager) OpenWrite(ctx context.Context, id StreamID) (io.Write
 	return nil, nil
 }
 
+type TestTimerManager struct {
+	TestDataManager
+}
+
+func (tm *TestTimerManager) OpenTimerWrite(ctx context.Context, id StreamID, timerID string) (io.Writer, error) {
+	return nil, nil
+}
+
 // TestSideInputReader simulates state reads using channels.
 type TestStateReader struct {
 	StateReader

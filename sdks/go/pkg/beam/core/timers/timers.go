@@ -17,11 +17,9 @@
 package timers
 
 import (
-	"context"
+	"fmt"
 	"reflect"
 	"time"
-
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 var (
@@ -59,8 +57,8 @@ type EventTimeTimer struct {
 }
 
 func (t *EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
-	log.Infof(context.Background(), "setting timer at event time")
-	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.Unix()})
+	fmt.Print("setting timer at event time")
+	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.UnixMilli()})
 }
 
 func (e EventTimeTimer) TimerKey() string {

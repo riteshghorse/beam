@@ -23,20 +23,20 @@ import (
 )
 
 // EncodeTimer encodes a typex.PaneInfo.
-func EncodeTimer(tm typex.Timers, w io.Writer) error {
-	w.Write(tm.Key)
-	// if err := EncodeBytes(tm.Key, w); err != nil {
-	// 	return errors.WithContext(err, "error encoding key")
-	// }
-	if tm.Tag != "" {
-		if err := EncodeStringUTF8(tm.Tag, w); err != nil {
-			return errors.WithContext(err, "error encoding tag")
-		}
+func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
+	// w.Write(tm.Key)
+
+	if err := EncodeStringUTF8(tm.Key, w); err != nil {
+		return errors.WithContext(err, "error encoding key")
 	}
-	w.Write(tm.Windows)
+	if err := EncodeStringUTF8(tm.Tag, w); err != nil {
+		return errors.WithContext(err, "error encoding tag")
+	}
+	// w.Write(tm.Windows)
 	// if err := EncodeBytes(tm.Windows, w); err != nil {
-	// 	return errors.WithContext(err, "error encoding window")
+	// 	return errors.WithContext(err, "error encoding windows")
 	// }
+
 	if err := EncodeBool(tm.Clear, w); err != nil {
 		return errors.WithContext(err, "error encoding key")
 	}
@@ -54,27 +54,26 @@ func EncodeTimer(tm typex.Timers, w io.Writer) error {
 }
 
 // DecodeTimer decodes a single byte.
-func DecodeTimer(r io.Reader) (typex.Timers, error) {
-	tm := typex.Timers{}
-	r.Read(tm.Key)
+func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
+	tm := typex.TimerMap{}
 
-	// if k, err := DecodeBytes(r); err != nil {
-	// 	return tm, errors.WithContext(err, "error decoding key")
-	// } else {
-	// 	tm.Key = k
-	// }
-
+	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
+		return tm, errors.WithContext(err, "error decoding key")
+	} else {
+		tm.Key = s
+	}
 	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
 		return tm, errors.WithContext(err, "error decoding tag")
 	} else {
 		tm.Tag = s
 	}
-	r.Read(tm.Windows)
-	// if w, err := DecodeBytes(r); err != nil {
-	// 	return tm, errors.WithContext(err, "error decoding win")
+	// r.Read(tm.Windows)
+	// if win, err := DecodeBytes(r); err != nil && err != io.EOF {
+	// 	return tm, errors.WithContext(err, "error decoding key")
 	// } else {
-	// 	tm.Windows = w
+	// 	tm.Windows = win
 	// }
+
 	if c, err := DecodeBool(r); err != nil {
 		return tm, errors.WithContext(err, "error decoding clear")
 	} else {

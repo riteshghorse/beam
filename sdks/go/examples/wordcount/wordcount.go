@@ -70,6 +70,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -77,7 +78,6 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/textio"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/register"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
 )
@@ -158,7 +158,7 @@ type formatFn struct {
 
 // formatFn is a DoFn that formats a word and its count as a string.
 func (f *formatFn) ProcessElement(ctx context.Context, t timers.Provider, w string, c int) string {
-	log.Infof(ctx, "setting timer: %v", f.BasicTimer)
+	fmt.Printf("setting timer: %v", f.BasicTimer)
 	f.BasicTimer.Set(t, time.Now().Add(time.Second*5))
 	time.Sleep(time.Second * 15)
 
@@ -167,9 +167,10 @@ func (f *formatFn) ProcessElement(ctx context.Context, t timers.Provider, w stri
 
 func (f *formatFn) OnTimer(t timers.Provider, timerID string, tagID string, w string, c int, emit func(string)) {
 	switch timerID {
-	case "BasicTimer":
-		emit("BasicTimer has been fired")
+	case "NormalTimers":
+		emit("NormalTimers has been fired")
 	}
+
 }
 
 // Concept #4: A composite PTransform is a Go function that adds
@@ -198,11 +199,11 @@ func main() {
 	// beam.Init() is an initialization hook that must be called on startup. On
 	// distributed runners, it is used to intercept control.
 	beam.Init()
-	ctx := context.Background()
+	// ctx := context.Background()
 
 	// Input validation is done as usual. Note that it must be after Init().
 	if *output == "" {
-		log.Fatal(ctx, "No output provided")
+		log.Fatal("No output provided")
 	}
 
 	// Concepts #3 and #4: The pipeline uses the named transform and DoFn.
@@ -217,7 +218,7 @@ func main() {
 
 	// Concept #1: The beamx.Run convenience wrapper allows a number of
 	// pre-defined runners to be used via the --runner flag.
-	if err := beamx.Run(ctx, p); err != nil {
-		log.Fatalf(ctx, "Failed to execute job: %v", err)
+	if err := beamx.Run(context.Background(), p); err != nil {
+		log.Fatalf("Failed to execute job: %v", err)
 	}
 }

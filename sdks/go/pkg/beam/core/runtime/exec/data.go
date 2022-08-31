@@ -67,7 +67,7 @@ type DataManager interface {
 type TimerManager interface {
 	DataManager
 	// OpenTimerWrite
-	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
+	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.Writer, error)
 }
 
 // StateReader is the interface for reading side input data.

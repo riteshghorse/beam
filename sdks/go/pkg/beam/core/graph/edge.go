@@ -155,7 +155,7 @@ type MultiEdge struct {
 	Op               Opcode
 	DoFn             *DoFn        // ParDo
 	RestrictionCoder *coder.Coder // SplittableParDo
-	TimerCoders      *coder.Coder
+	TimerCoders      map[string]*coder.Coder
 	CombineFn        *CombineFn         // Combine
 	AccumCoder       *coder.Coder       // Combine
 	Value            []byte             // Impulse

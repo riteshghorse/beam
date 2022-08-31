@@ -17,6 +17,7 @@ package harness
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 }
 
 // OpenWrite opens an io.WriteCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, key string) (io.WriteCloser, error) {
+func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, key string) (io.Writer, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -243,7 +244,7 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
-func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.WriteCloser {
+func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.Writer {
 	// log.Fatalf(ctx, "tfd: %v", key) -- key is coming out empty string
 	return c.makeWriter(ctx, clientID{timerFamilyID: key, ptransformID: ptransformID, instID: instID})
 }
@@ -348,7 +349,6 @@ func (c *DataChannel) read(ctx context.Context) {
 		for _, elm := range msg.GetTimers() {
 			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
-
 			var r *dataReader
 			if local, ok := cache[id]; ok {
 				r = local
@@ -515,7 +515,7 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 	// can only be created if an instruction is in scope, and aren't
 	// runner or user directed.
 
-	w := &dataWriter{ch: c, id: id}
+	w := &dataWriter{ch: c, id: id, i: 0}
 	// log.Fatalf(ctx, "client id: %#v", id)
 	// if id.timerFamilyID != "" {
 	// 	log.Fatalf(ctx, "client id: %#v", id)
@@ -570,6 +570,7 @@ func (r *dataReader) Read(buf []byte) (int, error) {
 type dataWriter struct {
 	buf []byte
 
+	i  int64
 	id clientID
 	ch *DataChannel
 }
@@ -647,6 +648,9 @@ func (w *dataWriter) Flush() error {
 	if w.buf == nil {
 		return nil
 	}
+	// if w.id.timerFamilyID != "" {
+	// 	return w.writeTimers()
+	// }
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 
@@ -667,16 +671,25 @@ func (w *dataWriter) Flush() error {
 }
 
 func (w *dataWriter) writeTimers(p []byte) error {
-	// log.Fatal(context.Background(), "dataWriter writing timers") - didn't reach here
+	// if w.buf == nil {
+	// 	return nil
+	// }
+	// log.Fatal(context.Background(), "dataWriter writing timers") //- didn't reach here
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
+	fmt.Printf("\n i:%v", w.i)
+	w.i += 1
+	if w.i < 7 {
+		w.buf = append(w.buf, p...)
+		return nil
+	}
 	msg := &fnpb.Elements{
 		Timers: []*fnpb.Elements_Timers{
 			{
 				InstructionId: string(w.id.instID),
 				TransformId:   w.id.ptransformID,
 				TimerFamilyId: w.id.timerFamilyID,
-				Timers:        p,
+				Timers:        w.buf,
 			},
 		},
 	}

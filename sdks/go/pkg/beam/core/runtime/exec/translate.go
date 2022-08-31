@@ -466,15 +466,21 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 
 					input := unmarshalKeyedValues(transform.GetInputs())
 					if len(userTimers) > 0 {
-						// panic(b.desc.TimerApiServiceDescriptor.GetUrl())
-						sID := StreamID{Port: Port{URL: b.desc.TimerApiServiceDescriptor.GetUrl()}, PtransformID: id.to}
-
-						ec, wc, err := b.makeCoderForPCollection(input[0])
-						if err != nil {
-							return nil, err
+						timerIDToCoder := make(map[string]*coder.Coder)
+						for key, spec := range userTimers {
+							cID := spec.GetTimerFamilyCoderId()
+							c, err := b.coders.Coder(cID)
+							if err != nil {
+								return nil, err
+							}
+							timerIDToCoder[key] = c
+							sID := StreamID{Port: Port{URL: b.desc.GetTimerApiServiceDescriptor().GetUrl()}, PtransformID: id.to}
+							ec, wc, err := b.makeCoderForPCollection(input[0])
+							if err != nil {
+								return nil, err
+							}
+							n.Timer = NewUserTimerAdapter(sID, coder.NewW(ec, wc), timerIDToCoder)
 						}
-						n.Timer = NewUserTimerAdapter(sID, coder.NewW(ec, wc), coder.NewT(ec, wc))
-						// n.timerManager =ScopedDataManager{}
 					}
 					for i := 1; i < len(input); i++ {
 						// TODO(https://github.com/apache/beam/issues/18602) Handle ViewFns for side inputs
