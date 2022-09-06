@@ -17,7 +17,6 @@
 package timers
 
 import (
-	"fmt"
 	"reflect"
 	"time"
 )
@@ -57,7 +56,6 @@ type EventTimeTimer struct {
 }
 
 func (t *EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
-	fmt.Print("setting timer at event time")
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.UnixMilli()})
 }
 

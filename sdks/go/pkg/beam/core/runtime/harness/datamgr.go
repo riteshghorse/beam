@@ -598,16 +598,19 @@ func (w *dataWriter) send(msg *fnpb.Elements) error {
 
 func (w *dataWriter) Close() error {
 	// Don't acquire the locks as Flush will do so.
-	l := len(w.buf)
-	err := w.Flush()
-	if err != nil {
-		return errors.Wrapf(err, "dataWriter[%v;%v].Close: error flushing buffer of length %d", w.id, w.ch.id, l)
-	}
-	// TODO(BEAM-13082): Consider a sync.Pool to reuse < 64MB buffers.
-	// The dataWriter won't be reused, but may be referenced elsewhere.
-	// Drop the buffer to let it be GC'd.
-	w.buf = nil
 
+	if w.id.timerFamilyID == "" {
+		l := len(w.buf)
+		err := w.Flush()
+		if err != nil {
+			return errors.Wrapf(err, "dataWriter[%v;%v].Close: error flushing buffer of length %d, w: %#v", w.id, w.ch.id, l, *w)
+		}
+
+		// TODO(BEAM-13082): Consider a sync.Pool to reuse < 64MB buffers.
+		// The dataWriter won't be reused, but may be referenced elsewhere.
+		// Drop the buffer to let it be GC'd.
+		w.buf = nil
+	}
 	// Now acquire the locks since we're sending.
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
@@ -626,19 +629,22 @@ func (w *dataWriter) Close() error {
 			},
 		}
 	} else {
-		msg = &fnpb.Elements{
-			Timers: []*fnpb.Elements_Timers{
-				{
-					InstructionId: string(w.id.instID),
-					TransformId:   w.id.ptransformID,
-					TimerFamilyId: w.id.timerFamilyID,
-					// TODO(https://github.com/apache/beam/issues/21164): Set IsLast true on final flush instead of w/empty sentinel?
-					// Empty data == sentinel
-					IsLast: true,
-				},
-			},
-		}
+		return nil
 	}
+	// else {
+	// 	msg = &fnpb.Elements{
+	// 		Timers: []*fnpb.Elements_Timers{
+	// 			{
+	// 				InstructionId: string(w.id.instID),
+	// 				TransformId:   w.id.ptransformID,
+	// 				TimerFamilyId: w.id.timerFamilyID,
+	// 				// TODO(https://github.com/apache/beam/issues/21164): Set IsLast true on final flush instead of w/empty sentinel?
+	// 				// Empty data == sentinel
+	// 				IsLast: true,
+	// 			},
+	// 		},
+	// 	}
+	// }
 	return w.send(msg)
 }
 
@@ -648,9 +654,9 @@ func (w *dataWriter) Flush() error {
 	if w.buf == nil {
 		return nil
 	}
-	// if w.id.timerFamilyID != "" {
-	// 	return w.writeTimers()
-	// }
+	if w.id.timerFamilyID != "" {
+		return nil
+	}
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 
@@ -671,18 +677,15 @@ func (w *dataWriter) Flush() error {
 }
 
 func (w *dataWriter) writeTimers(p []byte) error {
-	// if w.buf == nil {
-	// 	return nil
-	// }
-	// log.Fatal(context.Background(), "dataWriter writing timers") //- didn't reach here
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
 	fmt.Printf("\n i:%v", w.i)
 	w.i += 1
-	if w.i < 7 {
+	if w.i < 8 {
 		w.buf = append(w.buf, p...)
 		return nil
 	}
+	w.buf = append(w.buf, p...)
 	msg := &fnpb.Elements{
 		Timers: []*fnpb.Elements_Timers{
 			{
@@ -690,15 +693,15 @@ func (w *dataWriter) writeTimers(p []byte) error {
 				TransformId:   w.id.ptransformID,
 				TimerFamilyId: w.id.timerFamilyID,
 				Timers:        w.buf,
+				IsLast:        true,
 			},
 		},
 	}
+	w.buf = w.buf[:0]
 	return w.send(msg)
 }
 func (w *dataWriter) Write(p []byte) (n int, err error) {
-	// log.Fatal(context.Background(), "dataWriter write") -- success
 	if w.id.timerFamilyID != "" {
-		// log.Fatal(context.Background(), "dataWriter timer") //--didn;t reach. May be timerFamilyID is not getting set, need to export timer fields
 		if err := w.writeTimers(p); err != nil {
 			return 0, err
 		}

@@ -32,24 +32,22 @@ func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
 	if err := EncodeStringUTF8(tm.Tag, w); err != nil {
 		return errors.WithContext(err, "error encoding tag")
 	}
-	// w.Write(tm.Windows)
-	// if err := EncodeBytes(tm.Windows, w); err != nil {
-	// 	return errors.WithContext(err, "error encoding windows")
-	// }
+	w.Write(tm.Windows)
 
 	if err := EncodeBool(tm.Clear, w); err != nil {
 		return errors.WithContext(err, "error encoding key")
 	}
-	if err := EncodeVarInt(tm.FireTimestamp, w); err != nil {
-		return errors.WithContext(err, "error encoding key")
+	if !tm.Clear {
+		if err := EncodeVarInt(tm.FireTimestamp, w); err != nil {
+			return errors.WithContext(err, "error encoding key")
+		}
+		if err := EncodeVarInt(tm.HoldTimestamp, w); err != nil {
+			return errors.WithContext(err, "error encoding key")
+		}
+		if err := EncodePane(tm.PaneInfo, w); err != nil {
+			return errors.WithContext(err, "error encoding key")
+		}
 	}
-	if err := EncodeVarInt(tm.HoldTimestamp, w); err != nil {
-		return errors.WithContext(err, "error encoding key")
-	}
-	if err := EncodePane(tm.PaneInfo, w); err != nil {
-		return errors.WithContext(err, "error encoding key")
-	}
-	// log.Fatal(context.Background(), "encoding timer successfully")
 	return nil
 }
 
@@ -67,17 +65,15 @@ func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
 	} else {
 		tm.Tag = s
 	}
-	// r.Read(tm.Windows)
-	// if win, err := DecodeBytes(r); err != nil && err != io.EOF {
-	// 	return tm, errors.WithContext(err, "error decoding key")
-	// } else {
-	// 	tm.Windows = win
-	// }
+	r.Read(tm.Windows)
 
 	if c, err := DecodeBool(r); err != nil {
 		return tm, errors.WithContext(err, "error decoding clear")
 	} else {
 		tm.Clear = c
+	}
+	if tm.Clear {
+		return tm, nil
 	}
 	if ft, err := DecodeVarInt(r); err != nil {
 		return tm, errors.WithContext(err, "error decoding ft")

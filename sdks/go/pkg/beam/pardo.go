@@ -91,19 +91,8 @@ func TryParDo(s Scope, dofn interface{}, col PCollection, opts ...Option) ([]PCo
 	if err != nil {
 		return nil, addParDoCtx(err, s)
 	}
-	var wc *coder.WindowCoder
-	switch inWfn.Kind {
-	case window.GlobalWindows:
-		wc = coder.NewGlobalWindow()
-	case window.FixedWindows:
-		wc = coder.NewIntervalWindow()
-	case window.SlidingWindows:
-		wc = coder.NewIntervalWindow()
-	case window.Sessions:
-		wc = coder.NewIntervalWindow()
-	default:
-		panic("no window coder found")
-	}
+
+	wc := inWfn.Coder()
 	c, err := inferCoder(col.Type())
 	if err != nil {
 		panic(err)
