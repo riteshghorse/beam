@@ -19,6 +19,7 @@ import (
 	"io"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/ioutilx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 )
 
@@ -32,7 +33,10 @@ func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
 	if err := EncodeStringUTF8(tm.Tag, w); err != nil {
 		return errors.WithContext(err, "error encoding tag")
 	}
-	w.Write(tm.Windows)
+	// w.Write(tm.Windows)
+	if _, err := ioutilx.WriteUnsafe(w, tm.Windows); err != nil {
+		return err
+	}
 
 	if err := EncodeBool(tm.Clear, w); err != nil {
 		return errors.WithContext(err, "error encoding key")
@@ -54,18 +58,27 @@ func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
 // DecodeTimer decodes a single byte.
 func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
 	tm := typex.TimerMap{}
-
+	// panic("trying to decode timer")
 	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
 		return tm, errors.WithContext(err, "error decoding key")
+	} else if err == io.EOF {
+		// panic("eof on timer decoding")
+		return tm, nil
 	} else {
+		// panic(s)
 		tm.Key = s
 	}
 	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
 		return tm, errors.WithContext(err, "error decoding tag")
+	} else if err == io.EOF {
+		tm.Tag = ""
 	} else {
 		tm.Tag = s
 	}
-	r.Read(tm.Windows)
+	// r.Read(tm.Windows)
+	if _, err := ioutilx.ReadUnsafe(r, tm.Windows); err != nil {
+		return tm, err
+	}
 
 	if c, err := DecodeBool(r); err != nil {
 		return tm, errors.WithContext(err, "error decoding clear")

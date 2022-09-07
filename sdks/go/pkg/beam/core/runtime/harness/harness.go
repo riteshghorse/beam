@@ -383,7 +383,7 @@ func (c *control) handleInstruction(ctx context.Context, req *fnpb.InstructionRe
 		sampler := newSampler(store)
 		go sampler.start(ctx, samplePeriod)
 
-		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state, Timer: NewScopedDataManager(c.data, instID)})
+		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state, Timer: NewScopedDataManager(&DataChannelManager{}, instID)})
 
 		sampler.stop()
 

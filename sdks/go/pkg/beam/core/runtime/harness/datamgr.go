@@ -66,6 +66,15 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 	return ch.OpenWrite(ctx, id.PtransformID, s.instID), nil
 }
 
+// OpenTimerRead opens an io.ReadCloser on the given stream.
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (io.Reader, error) {
+	ch, err := s.open(ctx, id.Port)
+	if err != nil {
+		return nil, err
+	}
+	return ch.OpenTimerRead(ctx, id.PtransformID, s.instID), nil
+}
+
 // OpenWrite opens an io.WriteCloser on the given stream.
 func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, key string) (io.Writer, error) {
 	ch, err := s.open(ctx, id.Port)
@@ -235,12 +244,24 @@ func (c *DataChannel) OpenRead(ctx context.Context, ptransformID string, instID 
 		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
 		return &errReader{c.readErr}
 	}
-	return c.makeReader(ctx, cid)
+	return c.makeReader(ctx, cid, false)
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID instructionID) io.WriteCloser {
 	return c.makeWriter(ctx, clientID{ptransformID: ptransformID, instID: instID})
+}
+
+// OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
+func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) io.ReadCloser {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cid := clientID{ptransformID: ptransformID, instID: instID}
+	if c.readErr != nil {
+		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
+		return &errReader{c.readErr}
+	}
+	return c.makeReader(ctx, cid, true)
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
@@ -297,7 +318,7 @@ func (c *DataChannel) read(ctx context.Context) {
 				r = local
 			} else {
 				c.mu.Lock()
-				r = c.makeReader(ctx, id)
+				r = c.makeReader(ctx, id, false)
 				c.mu.Unlock()
 				cache[id] = r
 			}
@@ -354,7 +375,7 @@ func (c *DataChannel) read(ctx context.Context) {
 				r = local
 			} else {
 				c.mu.Lock()
-				r = c.makeReader(ctx, id)
+				r = c.makeReader(ctx, id, true)
 				c.mu.Unlock()
 				cache[id] = r
 			}
@@ -419,7 +440,7 @@ func (r *errReader) Close() error {
 }
 
 // makeReader creates a dataReader. It expects to be called while c.mu is held.
-func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
+func (c *DataChannel) makeReader(ctx context.Context, id clientID, isTimerReader bool) *dataReader {
 	var m map[string]*dataReader
 	var ok bool
 	if m, ok = c.readers[id.instID]; !ok {
@@ -427,11 +448,11 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 		c.readers[id.instID] = m
 	}
 
-	if r, ok := m[id.ptransformID]; ok {
+	if r, ok := m[makeID(id)]; ok {
 		return r
 	}
 
-	r := &dataReader{id: id, buf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c}
+	r := &dataReader{id: id, buf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c, isTimer: isTimerReader}
 
 	// Just in case initial data for an instruction arrives *after* an instructon has ended.
 	// eg. it was blocked by another reader being slow, or the other instruction failed.
@@ -443,7 +464,7 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 		return r
 	}
 
-	m[id.ptransformID] = r
+	m[makeID(id)] = r
 	return r
 }
 
@@ -516,10 +537,6 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 	// runner or user directed.
 
 	w := &dataWriter{ch: c, id: id, i: 0}
-	// log.Fatalf(ctx, "client id: %#v", id)
-	// if id.timerFamilyID != "" {
-	// 	log.Fatalf(ctx, "client id: %#v", id)
-	// }
 	m[makeID(id)] = w
 
 	return w
@@ -532,6 +549,7 @@ type dataReader struct {
 	cur       []byte
 	channel   *DataChannel
 	completed bool
+	isTimer   bool
 	err       error
 }
 
@@ -631,20 +649,6 @@ func (w *dataWriter) Close() error {
 	} else {
 		return nil
 	}
-	// else {
-	// 	msg = &fnpb.Elements{
-	// 		Timers: []*fnpb.Elements_Timers{
-	// 			{
-	// 				InstructionId: string(w.id.instID),
-	// 				TransformId:   w.id.ptransformID,
-	// 				TimerFamilyId: w.id.timerFamilyID,
-	// 				// TODO(https://github.com/apache/beam/issues/21164): Set IsLast true on final flush instead of w/empty sentinel?
-	// 				// Empty data == sentinel
-	// 				IsLast: true,
-	// 			},
-	// 		},
-	// 	}
-	// }
 	return w.send(msg)
 }
 
