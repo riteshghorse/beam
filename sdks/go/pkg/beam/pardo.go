@@ -93,16 +93,17 @@ func TryParDo(s Scope, dofn interface{}, col PCollection, opts ...Option) ([]PCo
 	}
 
 	wc := inWfn.Coder()
-	c, err := inferCoder(col.Type())
-	if err != nil {
-		panic(err)
-	}
+	// c, err := inferCoder(col.Type())
+	// if err != nil {
+	// 	panic(err)
+	// }
 	pipelineTimers := fn.PipelineTimers()
 	if len(pipelineTimers) > 0 {
+		c := coder.NewString()
 		edge.TimerCoders = make(map[string]*coder.Coder)
 		for _, pt := range pipelineTimers {
-			c := coder.NewT(c, wc)
-			edge.TimerCoders[pt.TimerKey()] = c
+			tc := coder.NewT(c, wc)
+			edge.TimerCoders[pt.TimerKey()] = tc
 		}
 	}
 

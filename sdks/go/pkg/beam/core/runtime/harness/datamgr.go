@@ -17,7 +17,6 @@ package harness
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -647,7 +646,17 @@ func (w *dataWriter) Close() error {
 			},
 		}
 	} else {
-		return nil
+		msg = &fnpb.Elements{
+			Timers: []*fnpb.Elements_Timers{
+				{
+					InstructionId: string(w.id.instID),
+					TransformId:   w.id.ptransformID,
+					TimerFamilyId: w.id.timerFamilyID,
+					// Timers:        w.buf,
+					IsLast: true,
+				},
+			},
+		}
 	}
 	return w.send(msg)
 }
@@ -683,20 +692,14 @@ func (w *dataWriter) Flush() error {
 func (w *dataWriter) writeTimers(p []byte) error {
 	w.ch.mu.Lock()
 	defer w.ch.mu.Unlock()
-	fmt.Printf("\n i:%v", w.i)
-	w.i += 1
-	if w.i < 8 {
-		w.buf = append(w.buf, p...)
-		return nil
-	}
-	w.buf = append(w.buf, p...)
+
 	msg := &fnpb.Elements{
 		Timers: []*fnpb.Elements_Timers{
 			{
 				InstructionId: string(w.id.instID),
 				TransformId:   w.id.ptransformID,
 				TimerFamilyId: w.id.timerFamilyID,
-				Timers:        w.buf,
+				Timers:        p,
 				IsLast:        true,
 			},
 		},

@@ -29,7 +29,6 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/ioutilx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 // DataSource is a Root execution unit.
@@ -131,10 +130,10 @@ func (n *DataSource) Process(ctx context.Context) error {
 	defer tr.Close()
 
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
-	var byteCount, byteCount2 int
+	var byteCount int
 	bcr := byteCountReader{reader: r, count: &byteCount}
 
-	tbcr := byteCountReader{reader: r, count: &byteCount2}
+	// tbcr := byteCountReader{reader: r, count: &byteCount2}
 	c := coder.SkipW(n.Coder)
 	wc := MakeWindowDecoder(n.Coder.Window)
 
@@ -174,11 +173,11 @@ func (n *DataSource) Process(ctx context.Context) error {
 		pe.Windows = ws
 		pe.Pane = pn
 
-		timer, err := coder.DecodeTimer(&tbcr)
-		if err != nil || timer.Key != "" {
-			// panic(fmt.Sprintf("timer in ds: %#v", timer))
-			log.Infof(ctx, "received timer in ds: %#v", timer)
-		}
+		// timer, err := coder.DecodeTimer(&tbcr)
+		// if err != nil || len(timer.Key) > 0 {
+		// 	// panic(fmt.Sprintf("timer in ds: %#v", timer))
+		// 	log.Infof(ctx, "received timer in ds: %#v", timer)
+		// }
 		var valReStreams []ReStream
 		for _, cv := range cvs {
 			values, err := n.makeReStream(ctx, pe, cv, &bcr)

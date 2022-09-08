@@ -159,8 +159,8 @@ type formatFn struct {
 // formatFn is a DoFn that formats a word and its count as a string.
 func (f *formatFn) ProcessElement(ctx context.Context, t timers.Provider, w string, c int) string {
 	// fmt.Printf("setting timer: %v", f.BasicTimer)
-	f.BasicTimer.Set(t, time.Now().Add(time.Second*5))
-	time.Sleep(time.Second * 15)
+	f.BasicTimer.SetWithTag(t, "first", time.Now().Add(time.Second*5))
+	// time.Sleep(time.Second * 15)
 	return fmt.Sprintf("-%s-: %v", w, c)
 }
 

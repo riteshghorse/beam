@@ -75,8 +75,8 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 	tp := timerProvider{
 		ctx:          ctx,
 		dm:           manager,
-		SID:          u.sID,
 		elementKey:   elementKey,
+		SID:          u.sID,
 		window:       win,
 		writersByKey: make(map[string]io.Writer),
 		codersByKey:  u.timerIDToCoder,
@@ -101,7 +101,6 @@ type timerProvider struct {
 func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 	if _, ok := p.writersByKey[key]; !ok {
 		w, err := p.dm.OpenTimerWrite(p.ctx, p.SID, key)
-		// log.Fatal(context.Background(), "created writer")
 		if err != nil {
 			return nil, err
 		}
@@ -111,12 +110,10 @@ func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 }
 
 func (p timerProvider) Set(t timers.TimerMap) {
-	fmt.Print("getting writer for timer")
 	w, err := p.getWriter(t.Key)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Print("got writer for timer")
 	tm := typex.TimerMap{
 		Key:           t.Key,
 		Tag:           t.Tag,
@@ -132,5 +129,4 @@ func (p timerProvider) Set(t timers.TimerMap) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Print("encoded for timer")
 }

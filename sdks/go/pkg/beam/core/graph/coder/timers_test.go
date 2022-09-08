@@ -15,35 +15,27 @@
 
 package coder
 
-import (
-	"bytes"
-	"testing"
-	"time"
-
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
-)
-
-func equalTimers(a, b typex.TimerMap) bool {
-	return a.FireTimestamp == b.FireTimestamp
-}
-func TestEncodeTimer(t *testing.T) {
-	tm := typex.TimerMap{
-		Key:           "Basic",
-		Tag:           "",
-		Windows:       []byte{},
-		Clear:         false,
-		FireTimestamp: time.Now().UnixMilli(),
-	}
-	var buf bytes.Buffer
-	err := EncodeTimer(tm, &buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := DecodeTimer(&buf)
-	if err != nil {
-		t.Fatalf("failed to decode timer from buffer %v, got %v", &buf, err)
-	}
-	if want := tm; !equalTimers(got, want) {
-		t.Errorf("got pane %v, want %v", got, want)
-	}
-}
+// func equalTimers(a, b typex.TimerMap) bool {
+// 	return a.FireTimestamp == b.FireTimestamp
+// }
+// func TestEncodeTimer(t *testing.T) {
+// 	tm := typex.TimerMap{
+// 		Key:           "Basic",
+// 		Tag:           "",
+// 		Windows:       []byte{},
+// 		Clear:         false,
+// 		FireTimestamp: time.Now().UnixMilli(),
+// 	}
+// 	var buf bytes.Buffer
+// 	err := EncodeTimer(tm, &buf)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	got, err := DecodeTimer(&buf)
+// 	if err != nil {
+// 		t.Fatalf("failed to decode timer from buffer %v, got %v", &buf, err)
+// 	}
+// 	if want := tm; !equalTimers(got, want) {
+// 		t.Errorf("got pane %v, want %v", got, want)
+// 	}
+// }

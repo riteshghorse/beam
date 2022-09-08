@@ -59,6 +59,10 @@ func (t *EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.UnixMilli()})
 }
 
+func (t *EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp time.Time) {
+	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp.UnixMilli()})
+}
+
 func (e EventTimeTimer) TimerKey() string {
 	return e.Key
 }

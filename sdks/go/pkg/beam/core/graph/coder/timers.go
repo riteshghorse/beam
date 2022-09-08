@@ -15,93 +15,90 @@
 
 package coder
 
-import (
-	"io"
-
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/ioutilx"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
-)
-
 // EncodeTimer encodes a typex.PaneInfo.
-func EncodeTimer(tm typex.TimerMap, w io.Writer) error {
-	// w.Write(tm.Key)
+// func EncodeTimer(elm ElementEncoder, tm typex.TimerMap, w io.Writer) error {
+// 	// w.Write(tm.Key)
 
-	if err := EncodeStringUTF8(tm.Key, w); err != nil {
-		return errors.WithContext(err, "error encoding key")
-	}
-	if err := EncodeStringUTF8(tm.Tag, w); err != nil {
-		return errors.WithContext(err, "error encoding tag")
-	}
-	// w.Write(tm.Windows)
-	if _, err := ioutilx.WriteUnsafe(w, tm.Windows); err != nil {
-		return err
-	}
+// 	// if err := EncodeStringUTF8(tm.Key, w); err != nil {
+// 	// 	return errors.WithContext(err, "error encoding key")
+// 	// }
+// 	var b bytes.Buffer
+// 	elm.Encode(&exec.FullValue{Elm: tm.Key}, &b)
 
-	if err := EncodeBool(tm.Clear, w); err != nil {
-		return errors.WithContext(err, "error encoding key")
-	}
-	if !tm.Clear {
-		if err := EncodeVarInt(tm.FireTimestamp, w); err != nil {
-			return errors.WithContext(err, "error encoding key")
-		}
-		if err := EncodeVarInt(tm.HoldTimestamp, w); err != nil {
-			return errors.WithContext(err, "error encoding key")
-		}
-		if err := EncodePane(tm.PaneInfo, w); err != nil {
-			return errors.WithContext(err, "error encoding key")
-		}
-	}
-	return nil
-}
+// 	if err := EncodeStringUTF8(tm.Tag, &b); err != nil {
+// 		return errors.WithContext(err, "error encoding tag")
+// 	}
+// 	// w.Write(tm.Windows)
+// 	if _, err := ioutilx.WriteUnsafe(&b, tm.Windows); err != nil {
+// 		return err
+// 	}
 
-// DecodeTimer decodes a single byte.
-func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
-	tm := typex.TimerMap{}
-	// panic("trying to decode timer")
-	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
-		return tm, errors.WithContext(err, "error decoding key")
-	} else if err == io.EOF {
-		// panic("eof on timer decoding")
-		return tm, nil
-	} else {
-		// panic(s)
-		tm.Key = s
-	}
-	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
-		return tm, errors.WithContext(err, "error decoding tag")
-	} else if err == io.EOF {
-		tm.Tag = ""
-	} else {
-		tm.Tag = s
-	}
-	// r.Read(tm.Windows)
-	if _, err := ioutilx.ReadUnsafe(r, tm.Windows); err != nil {
-		return tm, err
-	}
+// 	if err := EncodeBool(tm.Clear, &b); err != nil {
+// 		return errors.WithContext(err, "error encoding key")
+// 	}
+// 	if !tm.Clear {
+// 		if err := EncodeVarInt(tm.FireTimestamp, &b); err != nil {
+// 			return errors.WithContext(err, "error encoding key")
+// 		}
+// 		if err := EncodeVarInt(tm.HoldTimestamp, &b); err != nil {
+// 			return errors.WithContext(err, "error encoding key")
+// 		}
+// 		if err := EncodePane(tm.PaneInfo, &b); err != nil {
+// 			return errors.WithContext(err, "error encoding key")
+// 		}
+// 	}
+// 	w.Write(b.Bytes())
+// 	return nil
+// }
 
-	if c, err := DecodeBool(r); err != nil {
-		return tm, errors.WithContext(err, "error decoding clear")
-	} else {
-		tm.Clear = c
-	}
-	if tm.Clear {
-		return tm, nil
-	}
-	if ft, err := DecodeVarInt(r); err != nil {
-		return tm, errors.WithContext(err, "error decoding ft")
-	} else {
-		tm.FireTimestamp = ft
-	}
-	if ht, err := DecodeVarInt(r); err != nil {
-		return tm, errors.WithContext(err, "error decoding ht")
-	} else {
-		tm.HoldTimestamp = ht
-	}
-	if pn, err := DecodePane(r); err != nil {
-		return tm, errors.WithContext(err, "error decoding pn")
-	} else {
-		tm.PaneInfo = pn
-	}
-	return tm, nil
-}
+// // DecodeTimer decodes a single byte.
+// func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
+// 	tm := typex.TimerMap{}
+// 	// panic("trying to decode timer")
+// 	// r.Read(tm.Key)
+// 	// if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
+// 	// 	return tm, errors.WithContext(err, "error decoding key")
+// 	// } else if err == io.EOF {
+// 	// 	// panic("eof on timer decoding")
+// 	// 	return tm, nil
+// 	// } else {
+// 	// 	// panic(s)
+// 	// 	tm.Key = s
+// 	// }
+// 	if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
+// 		return tm, errors.WithContext(err, "error decoding tag")
+// 	} else if err == io.EOF {
+// 		tm.Tag = ""
+// 	} else {
+// 		tm.Tag = s
+// 	}
+// 	// r.Read(tm.Windows)
+// 	if _, err := ioutilx.ReadUnsafe(r, tm.Windows); err != nil {
+// 		return tm, err
+// 	}
+
+// 	if c, err := DecodeBool(r); err != nil {
+// 		return tm, errors.WithContext(err, "error decoding clear")
+// 	} else {
+// 		tm.Clear = c
+// 	}
+// 	if tm.Clear {
+// 		return tm, nil
+// 	}
+// 	if ft, err := DecodeVarInt(r); err != nil {
+// 		return tm, errors.WithContext(err, "error decoding ft")
+// 	} else {
+// 		tm.FireTimestamp = ft
+// 	}
+// 	if ht, err := DecodeVarInt(r); err != nil {
+// 		return tm, errors.WithContext(err, "error decoding ht")
+// 	} else {
+// 		tm.HoldTimestamp = ht
+// 	}
+// 	if pn, err := DecodePane(r); err != nil {
+// 		return tm, errors.WithContext(err, "error decoding pn")
+// 	} else {
+// 		tm.PaneInfo = pn
+// 	}
+// 	return tm, nil
+// }
