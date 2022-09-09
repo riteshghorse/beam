@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
@@ -27,7 +26,7 @@ import (
 )
 
 type UserTimerAdapter interface {
-	NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error)
+	NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error)
 }
 
 type userTimerAdapter struct {
@@ -45,17 +44,14 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoders map[string]*c
 
 	wc := MakeWindowEncoder(c.Window)
 	var kc ElementEncoder
-	// var ec ElementDecoder
-
 	if coder.IsKV(coder.SkipW(c)) {
-		// log.Fatal("coder is KV")
 		kc = MakeElementEncoder(coder.SkipW(c).Components[0])
 	}
 
 	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, c: c, timerIDToCoder: timerCoders}
 }
 
-func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error) {
+func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
 	if u.kc == nil {
 		return timerProvider{}, fmt.Errorf("cannot make a state provider for an unkeyed input %v", element)
 	}
@@ -64,17 +60,13 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 		return timerProvider{}, err
 	}
 
-	if w == nil {
-		log.Fatal("nil window for encoding")
-	}
-	// log.Fatalf("window for encoding: %#v", w)
-	win, err := EncodeWindow(u.wc, w[0])
+	win, err := EncodeWindow(u.wc, w)
 	if err != nil {
 		return timerProvider{}, err
 	}
 	tp := timerProvider{
 		ctx:          ctx,
-		dm:           manager,
+		tm:           manager,
 		elementKey:   elementKey,
 		SID:          u.sID,
 		window:       win,
@@ -87,7 +79,7 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 
 type timerProvider struct {
 	ctx        context.Context
-	dm         TimerManager
+	tm         TimerManager
 	SID        StreamID
 	elementKey []byte
 	window     []byte
@@ -99,14 +91,16 @@ type timerProvider struct {
 }
 
 func (p *timerProvider) getWriter(key string) (io.Writer, error) {
-	if _, ok := p.writersByKey[key]; !ok {
-		w, err := p.dm.OpenTimerWrite(p.ctx, p.SID, key)
+	if w, ok := p.writersByKey[key]; ok {
+		return w, nil
+	} else {
+		w, err := p.tm.OpenTimerWrite(p.ctx, p.SID, key)
 		if err != nil {
 			return nil, err
 		}
 		p.writersByKey[key] = w
+		return p.writersByKey[key], nil
 	}
-	return p.writersByKey[key], nil
 }
 
 func (p timerProvider) Set(t timers.TimerMap) {

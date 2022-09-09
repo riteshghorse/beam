@@ -42,7 +42,6 @@ type DataSource struct {
 
 	source DataManager
 	state  StateReader
-	// timer  TimerManager
 
 	index    int64
 	splitIdx int64
@@ -123,12 +122,6 @@ func (n *DataSource) Process(ctx context.Context) error {
 	}
 	defer r.Close()
 
-	// tr, err := n.timer.OpenRead(ctx, n.SID)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer tr.Close()
-
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
 	var byteCount int
 	bcr := byteCountReader{reader: r, count: &byteCount}
@@ -173,11 +166,6 @@ func (n *DataSource) Process(ctx context.Context) error {
 		pe.Windows = ws
 		pe.Pane = pn
 
-		// timer, err := coder.DecodeTimer(&tbcr)
-		// if err != nil || len(timer.Key) > 0 {
-		// 	// panic(fmt.Sprintf("timer in ds: %#v", timer))
-		// 	log.Infof(ctx, "received timer in ds: %#v", timer)
-		// }
 		var valReStreams []ReStream
 		for _, cv := range cvs {
 			values, err := n.makeReStream(ctx, pe, cv, &bcr)

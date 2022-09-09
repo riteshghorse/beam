@@ -191,7 +191,7 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 		args[n.weIdx] = we
 	}
 	if n.tpIdx >= 0 {
-		tp, err := ta.NewTimerProvider(ctx, dm, ws, opt)
+		tp, err := ta.NewTimerProvider(ctx, dm, ws[0], opt)
 		if err != nil {
 			return nil, err
 		}

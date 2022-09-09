@@ -358,7 +358,6 @@ func (n *ParDo) invokeProcessFn(ctx context.Context, pn typex.PaneInfo, ws []typ
 		return nil, err
 	}
 
-	// TODO(riteshghorse): send timer adapter and timer manager from here instead of nil?
 	val, err = n.inv.Invoke(ctx, pn, ws, ts, opt, n.bf, n.we, n.Timer, n.timerManager, n.cache.extra...)
 	if err != nil {
 		return nil, err
