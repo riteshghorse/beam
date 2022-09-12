@@ -164,7 +164,7 @@ func (f *formatFn) ProcessElement(ctx context.Context, t timers.Provider, w stri
 	return fmt.Sprintf("-%s-: %v", w, c)
 }
 
-func (f *formatFn) OnTimer(t timers.Provider, timerID string, tagID string, w string, c int, emit func(string)) {
+func (f *formatFn) OnTimer(t timers.Provider, w string, c int, timerID string, tagID string, emit func(string)) {
 	switch timerID {
 	case "NormalTimers":
 		emit("NormalTimers has been fired")

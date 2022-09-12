@@ -41,6 +41,7 @@ type DataSource struct {
 	PCol  PCollection // Handles size metrics. Value instead of pointer so it's initialized by default in tests.
 
 	source DataManager
+	timer  TimerManager
 	state  StateReader
 
 	index    int64
@@ -82,6 +83,7 @@ func (n *DataSource) Up(ctx context.Context) error {
 func (n *DataSource) StartBundle(ctx context.Context, id string, data DataContext) error {
 	n.mu.Lock()
 	n.source = data.Data
+	n.timer = data.Timer
 	n.state = data.State
 	// n.timer = data.Timer
 	n.start = time.Now()
@@ -122,11 +124,17 @@ func (n *DataSource) Process(ctx context.Context) error {
 	}
 	defer r.Close()
 
+	// tr, err := n.timer.OpenTimerRead(ctx, n.SID)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer tr.Close()
+
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
 	var byteCount int
 	bcr := byteCountReader{reader: r, count: &byteCount}
+	// bcr2 := byteCountReader{reader: tr, count: &byteCount2}
 
-	// tbcr := byteCountReader{reader: r, count: &byteCount2}
 	c := coder.SkipW(n.Coder)
 	wc := MakeWindowDecoder(n.Coder.Window)
 
@@ -143,6 +151,9 @@ func (n *DataSource) Process(ctx context.Context) error {
 	default:
 		cp = MakeElementDecoder(c)
 	}
+
+	// timerCoder := coder.NewT(coder.NewString(), n.Coder.Window)
+	// tdec := MakeElementDecoder(coder.SkipW(timerCoder))
 
 	for {
 		if n.incrementIndexAndCheckSplit() {
@@ -174,6 +185,16 @@ func (n *DataSource) Process(ctx context.Context) error {
 			}
 			valReStreams = append(valReStreams, values)
 		}
+
+		// tfv, err := tdec.Decode(tr)
+		// if err != nil {
+		// 	return errors.Wrap(err, "timer decode failed")
+		// }
+		// timerStream, err := n.makeReStream(ctx, tfv, tdec, &bcr2)
+		// if err != nil {
+		// 	return errors.Wrap(err, "timer stream failed")
+		// }
+		// valReStreams = append(valReStreams, timerStream)
 
 		if err := n.Out.ProcessElement(ctx, pe, valReStreams...); err != nil {
 			return err

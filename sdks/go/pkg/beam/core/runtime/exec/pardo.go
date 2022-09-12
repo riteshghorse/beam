@@ -176,6 +176,7 @@ func (n *ParDo) processMainInput(mainIn *MainInput) error {
 // window. For DoFns that observe windows, this function should be called on
 // each individual window by exploding the windows first.
 func (n *ParDo) processSingleWindow(mainIn *MainInput) (sdf.ProcessContinuation, error) {
+
 	elm := &mainIn.Key
 	val, err := n.invokeProcessFn(n.ctx, elm.Pane, elm.Windows, elm.Timestamp, mainIn)
 	if err != nil {
@@ -236,6 +237,7 @@ func (n *ParDo) FinishBundle(_ context.Context) error {
 		return n.fail(err)
 	}
 	n.reader = nil
+	n.timerManager = nil
 	n.cache = nil
 
 	if err := MultiFinishBundle(n.ctx, n.Out...); err != nil {
@@ -251,6 +253,7 @@ func (n *ParDo) Down(ctx context.Context) error {
 	}
 	n.status = Down
 	n.reader = nil
+	n.timerManager = nil
 	n.cache = nil
 
 	if _, err := InvokeWithoutEventTime(ctx, n.Fn.TeardownFn(), nil, nil, nil, nil, nil); err != nil {
@@ -306,7 +309,6 @@ func (n *ParDo) initSideInput(ctx context.Context, w typex.Window) error {
 	}
 
 	// Slow path: init side input for the given window
-
 	sideinput, err := makeSideInputs(ctx, w, n.Side, n.reader, n.Fn.ProcessElementFn(), n.Inbound)
 	if err != nil {
 		return err

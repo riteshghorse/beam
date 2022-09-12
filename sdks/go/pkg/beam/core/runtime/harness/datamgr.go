@@ -66,7 +66,7 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 }
 
 // OpenTimerRead opens an io.ReadCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (io.Reader, error) {
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (io.ReadCloser, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID)
 }
 
 // OpenWrite opens an io.WriteCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, key string) (io.Writer, error) {
+func (s *ScopedDataManager) OpenTimerWrite(ctx context.Context, id exec.StreamID, key string) (io.WriteCloser, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -253,6 +253,7 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 
 // OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) io.ReadCloser {
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cid := clientID{ptransformID: ptransformID, instID: instID}
@@ -264,7 +265,7 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
-func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.Writer {
+func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.WriteCloser {
 	// log.Fatalf(ctx, "tfd: %v", key) -- key is coming out empty string
 	return c.makeWriter(ctx, clientID{timerFamilyID: key, ptransformID: ptransformID, instID: instID})
 }
@@ -368,7 +369,7 @@ func (c *DataChannel) read(ctx context.Context) {
 
 		for _, elm := range msg.GetTimers() {
 			log.Infof(ctx, "timers received: %#v", elm)
-			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId()), timerFamilyID: elm.GetTimerFamilyId()}
+			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
 			var r *dataReader
 			if local, ok := cache[id]; ok {
 				r = local

@@ -263,6 +263,7 @@ func MakeElementDecoder(c *coder.Coder) ElementDecoder {
 	case coder.Timer:
 		return &timerDecoder{
 			elm: MakeElementDecoder(c.Components[0]),
+			win: MakeWindowDecoder(c.Window),
 		}
 
 	case coder.Row:
@@ -900,10 +901,11 @@ func (e *timerEncoder) Encode(val *FullValue, w io.Writer) error {
 
 type timerDecoder struct {
 	elm ElementDecoder
+	win WindowDecoder
 }
 
 func (d *timerDecoder) DecodeTo(r io.Reader, fv *FullValue) error {
-	data, err := DecodeTimer(r)
+	data, err := DecodeTimer(d.elm, r)
 	if err != nil {
 		return err
 	}
@@ -1247,19 +1249,14 @@ func EncodeTimer(elm ElementEncoder, tm typex.TimerMap, w io.Writer) error {
 }
 
 // DecodeTimer decodes a single byte.
-func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
+func DecodeTimer(dec ElementDecoder, r io.Reader) (typex.TimerMap, error) {
 	tm := typex.TimerMap{}
-	// panic("trying to decode timer")
-	// r.Read(tm.Key)
-	// if s, err := DecodeStringUTF8(r); err != nil && err != io.EOF {
-	// 	return tm, errors.WithContext(err, "error decoding key")
-	// } else if err == io.EOF {
-	// 	// panic("eof on timer decoding")
-	// 	return tm, nil
-	// } else {
-	// 	// panic(s)
-	// 	tm.Key = s
-	// }
+
+	if fv, err := dec.Decode(r); err != nil {
+		return tm, errors.WithContext(err, "error decoding timer key")
+	} else {
+		tm.Key = fv.Elm.(string)
+	}
 	if s, err := coder.DecodeStringUTF8(r); err != nil && err != io.EOF {
 		return tm, errors.WithContext(err, "error decoding tag")
 	} else if err == io.EOF {
@@ -1267,7 +1264,7 @@ func DecodeTimer(r io.Reader) (typex.TimerMap, error) {
 	} else {
 		tm.Tag = s
 	}
-	// r.Read(tm.Windows)
+
 	if _, err := ioutilx.ReadUnsafe(r, tm.Windows); err != nil {
 		return tm, err
 	}

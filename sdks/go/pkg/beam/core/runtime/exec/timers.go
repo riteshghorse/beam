@@ -30,11 +30,11 @@ type UserTimerAdapter interface {
 }
 
 type userTimerAdapter struct {
-	sID            StreamID
+	SID            StreamID
 	wc             WindowEncoder
 	kc             ElementEncoder
 	timerIDToCoder map[string]*coder.Coder
-	c              *coder.Coder
+	C              *coder.Coder
 }
 
 func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoders map[string]*coder.Coder) UserTimerAdapter {
@@ -48,10 +48,10 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoders map[string]*c
 		kc = MakeElementEncoder(coder.SkipW(c).Components[0])
 	}
 
-	return &userTimerAdapter{sID: sID, wc: wc, kc: kc, c: c, timerIDToCoder: timerCoders}
+	return &userTimerAdapter{SID: sID, wc: wc, kc: kc, C: c, timerIDToCoder: timerCoders}
 }
 
-func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
+func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
 	if u.kc == nil {
 		return timerProvider{}, fmt.Errorf("cannot make a state provider for an unkeyed input %v", element)
 	}
@@ -68,7 +68,7 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 		ctx:          ctx,
 		tm:           manager,
 		elementKey:   elementKey,
-		SID:          u.sID,
+		SID:          u.SID,
 		window:       win,
 		writersByKey: make(map[string]io.Writer),
 		codersByKey:  u.timerIDToCoder,

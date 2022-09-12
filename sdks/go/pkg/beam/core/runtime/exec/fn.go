@@ -162,7 +162,7 @@ func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main
 // side input and emitters. It returns the direct output, if any.
-func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, dm TimerManager, extra ...interface{}) (*FullValue, error) {
+func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.EventTime, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
 	// (1) Populate contexts
 	// extract these to make things easier to read.
 	args := n.args
@@ -191,7 +191,7 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 		args[n.weIdx] = we
 	}
 	if n.tpIdx >= 0 {
-		tp, err := ta.NewTimerProvider(ctx, dm, ws[0], opt)
+		tp, err := ta.NewTimerProvider(ctx, tm, ws[0], opt)
 		if err != nil {
 			return nil, err
 		}
@@ -199,6 +199,7 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 		args[n.tpIdx] = tp
 	}
 	// (2) Main input from value, if any.
+
 	i := 0
 	if opt != nil {
 		if opt.RTracker != nil {
