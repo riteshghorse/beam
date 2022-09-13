@@ -42,6 +42,7 @@ func (id StreamID) String() string {
 type DataContext struct {
 	Data  DataManager
 	State StateReader
+	Timer TimerManager
 }
 
 // SideCache manages cached ReStream values for side inputs that can be re-used across
@@ -89,6 +90,14 @@ type StateReader interface {
 	OpenMultimapKeysUserStateClearer(ctx context.Context, id StreamID, userStateID string, key []byte, w []byte) (io.Writer, error)
 	// GetSideInputCache returns the SideInputCache being used at the harness level.
 	GetSideInputCache() SideCache
+}
+
+type TimerManager interface {
+	DataManager
+	// OpenTimerWrite
+	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
+	// OpenTimerRead opens a closable byte stream for reading.
+	OpenTimerRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
 }
 
 // TODO(herohde) 7/20/2018: user state management

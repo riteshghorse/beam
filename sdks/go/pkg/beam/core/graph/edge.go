@@ -156,12 +156,13 @@ type MultiEdge struct {
 	DoFn             *DoFn                   // ParDo
 	RestrictionCoder *coder.Coder            // SplittableParDo
 	StateCoders      map[string]*coder.Coder // Stateful ParDo
-	CombineFn        *CombineFn              // Combine
-	AccumCoder       *coder.Coder            // Combine
-	Value            []byte                  // Impulse
-	External         *ExternalTransform      // Current External Transforms API
-	Payload          *Payload                // Legacy External Transforms API
-	WindowFn         *window.Fn              // WindowInto
+	TimerCoders      map[string]*coder.Coder
+	CombineFn        *CombineFn         // Combine
+	AccumCoder       *coder.Coder       // Combine
+	Value            []byte             // Impulse
+	External         *ExternalTransform // Current External Transforms API
+	Payload          *Payload           // Legacy External Transforms API
+	WindowFn         *window.Fn         // WindowInto
 
 	Input  []*Inbound
 	Output []*Outbound

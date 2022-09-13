@@ -25,13 +25,16 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/options/gcpopts"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/register"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/util/pubsubx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/debug"
@@ -48,6 +51,23 @@ var (
 		"baz",
 	}
 )
+
+func init() {
+	register.DoFn5x1[context.Context, beam.EventTime, timers.Provider, string, int, string](&formatFn{})
+	register.Emitter2[string, int]()
+}
+
+type formatFn struct {
+	BasicTimer timers.EventTimeTimer
+}
+
+// formatFn is a DoFn that formats a word and its count as a string.
+func (f *formatFn) ProcessElement(ctx context.Context, ts beam.EventTime, t timers.Provider, w string, c int) string {
+	// fmt.Printf("setting timer: %v", f.BasicTimer)
+	f.BasicTimer.SetWithTag(t, "first", ts.ToTime().Add(time.Second*2))
+	// time.Sleep(time.Second * 10)
+	return fmt.Sprintf("-%s-: %v", w, c)
+}
 
 func main() {
 	flag.Parse()
@@ -73,7 +93,10 @@ func main() {
 	str := beam.ParDo(s, func(b []byte) string {
 		return (string)(b)
 	}, col)
-	cap := beam.ParDo(s, strings.ToUpper, str)
+	keyed := beam.ParDo(s, func(s string, emit func(string, int)) {
+		emit(s, 1)
+	}, str)
+	cap := beam.ParDo(s, &formatFn{BasicTimer: timers.MakeEventTimeTimer("keyedTimer")}, keyed)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {

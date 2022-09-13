@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/profiler"
+	_ "cloud.google.com/go/profiler"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/metrics"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/exec"
@@ -148,6 +149,7 @@ func Main(ctx context.Context, loggingEndpoint, controlEndpoint string) error {
 		metStore:             make(map[instructionID]*metrics.Store),
 		failed:               make(map[instructionID]error),
 		data:                 &DataChannelManager{},
+		timer:                &DataChannelManager{},
 		state:                &StateChannelManager{},
 		cache:                &sideCache,
 		runnerCapabilities:   rcMap,
@@ -297,8 +299,8 @@ type control struct {
 	failed map[instructionID]error // protected by mu
 	mu     sync.Mutex
 
-	data  *DataChannelManager
-	state *StateChannelManager
+	data, timer *DataChannelManager
+	state       *StateChannelManager
 	// TODO(BEAM-11097): Cache is currently unused.
 	cache              *statecache.SideInputCache
 	runnerCapabilities map[string]bool
@@ -391,18 +393,23 @@ func (c *control) handleInstruction(ctx context.Context, req *fnpb.InstructionRe
 		tokens := msg.GetCacheTokens()
 		c.cache.SetValidTokens(tokens...)
 
+		// if len(msg.GetElements()..GetTimers()) > 0 {
+		// 	panic(msg.GetElements().GetTimers())
+		// }
 		data := NewScopedDataManager(c.data, instID)
 		state := NewScopedStateReaderWithCache(c.state, instID, c.cache)
+		timer := NewScopedDataManager(c.timer, instID)
 
 		sampler := newSampler(store)
 		go sampler.start(ctx, samplePeriod)
 
-		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state})
+		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state, Timer: timer})
 
 		sampler.stop()
 
 		data.Close()
 		state.Close()
+		timer.Close()
 
 		c.cache.CompleteBundle(tokens...)
 
