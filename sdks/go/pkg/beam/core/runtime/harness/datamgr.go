@@ -16,11 +16,13 @@
 package harness
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/exec"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
@@ -373,11 +375,33 @@ func (c *DataChannel) read(ctx context.Context) {
 		}
 		// }
 
-		// if c.isTimer {
 		for _, elm := range msg.GetTimers() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-			log.Infof(ctx, "timer received from: %#v", elm)
-			// dec := exec.MakeElementDecoder(coder.NewString())
+			if len(elm.GetTimers()) > 0 {
+				log.Infof(ctx, "timer received from: %#v", elm)
+
+				b := elm.GetTimers()
+				br := bytes.NewReader(b)
+				key, err := coder.DecodeStringUTF8(br)
+				if err != nil {
+					panic(err)
+				}
+				tag, err := coder.DecodeStringUTF8(br)
+				if err != nil {
+					panic(err)
+				}
+				wc := coder.NewGlobalWindow()
+				win := exec.MakeWindowDecoder(wc)
+				window, err := win.Decode(br)
+				if err != nil {
+					panic(err)
+				}
+				clear, err := coder.DecodeBool(br)
+				if err != nil {
+					panic(err)
+				}
+				log.Debugf(ctx, "Key: %v, tag: %v, win: %v, clear: %v", key, tag, window, clear)
+			}
 			// log.Infof(ctx, "decoded timer: %v", exec.DecodeTimer(dec, io.ByteReader))
 			var r *dataReader
 			if local, ok := timerCache[id]; ok {
@@ -394,6 +418,17 @@ func (c *DataChannel) read(ctx context.Context) {
 				if !r.completed {
 					// Use the last segment if any.
 					if len(elm.GetTimers()) != 0 {
+						// b := elm.GetTimers()
+						// br := bytes.NewReader(b)
+						// key, err := coder.DecodeStringUTF8(br)
+						// if err != nil {
+						// 	panic(err)
+						// }
+						// tag, err := coder.DecodeStringUTF8(br)
+						// if err != nil {
+						// 	panic(err)
+						// }
+						// panic(fmt.Sprintf("Key: %v, tag: %v", key, tag))
 						// In case of local side closing, send with select.
 						select {
 						case r.buf <- elm.GetTimers():
@@ -427,6 +462,19 @@ func (c *DataChannel) read(ctx context.Context) {
 			// will be marked as completed and further remote data will be ignored.
 			select {
 			case r.buf <- elm.GetTimers():
+				// if len(elm.GetTimers()) > 0 {
+				// 	b := elm.GetTimers()
+				// 	br := bytes.NewReader(b)
+				// 	key, err := coder.DecodeStringUTF8(br)
+				// 	if err != nil {
+				// 		panic(err)
+				// 	}
+				// 	tag, err := coder.DecodeStringUTF8(br)
+				// 	if err != nil {
+				// 		panic(err)
+				// 	}
+				// 	panic(fmt.Sprintf("key: %v, tag: %v", key, tag))
+				// }
 			case <-r.done:
 				r.completed = true
 				close(r.buf)

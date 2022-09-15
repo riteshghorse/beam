@@ -29,6 +29,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/util/errorx"
 )
 
@@ -140,6 +141,19 @@ func (n *ParDo) ProcessElement(_ context.Context, elm *FullValue, values ...ReSt
 	}
 
 	n.states.Set(n.ctx, metrics.ProcessBundle)
+
+	log.Debug(n.ctx, "reading timer")
+	if n.Timer != nil {
+		r, err := n.timerManager.OpenTimerRead(n.ctx, n.Timer.(*userTimerAdapter).SID)
+		if err != nil {
+			panic(err)
+		}
+		log.Debug(n.ctx, "opened timer stream")
+		defer r.Close()
+		var b []byte
+		r.Read(b)
+		log.Debugf(n.ctx, "timer read: %v", b)
+	}
 
 	return n.processMainInput(&MainInput{Key: *elm, Values: values})
 }

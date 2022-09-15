@@ -62,6 +62,7 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 	tp := timerProvider{
 		ctx:          ctx,
 		tm:           manager,
+		key:          element.(*MainInput).Key.Elm.(string),
 		elementKey:   elementKey,
 		SID:          u.SID,
 		window:       []typex.Window{w},
@@ -76,6 +77,7 @@ type timerProvider struct {
 	ctx        context.Context
 	tm         TimerManager
 	SID        StreamID
+	key        string
 	elementKey []byte
 	window     []typex.Window
 
@@ -104,7 +106,7 @@ func (p *timerProvider) Set(t timers.TimerMap) {
 		panic(err)
 	}
 	tm := typex.TimerMap{
-		Key:           t.Key,
+		Key:           p.key,
 		Tag:           t.Tag,
 		Windows:       p.window,
 		Clear:         t.Clear,
