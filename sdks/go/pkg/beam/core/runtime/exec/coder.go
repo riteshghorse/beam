@@ -1264,7 +1264,6 @@ func decodeTimer(dec ElementDecoder, win WindowDecoder, r io.Reader) (typex.Time
 	} else {
 		tm.Key = fv.Elm.(string)
 	}
-
 	if s, err := coder.DecodeStringUTF8(r); err != nil && err != io.EOF {
 		return tm, errors.WithContext(err, "error decoding tag")
 	} else if err == io.EOF {

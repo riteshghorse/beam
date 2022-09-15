@@ -73,7 +73,6 @@ import (
 	"log"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
@@ -159,7 +158,7 @@ type formatFn struct {
 // formatFn is a DoFn that formats a word and its count as a string.
 func (f *formatFn) ProcessElement(ctx context.Context, ts beam.EventTime, t timers.Provider, w string, c int) string {
 	// fmt.Printf("setting timer: %v", f.BasicTimer)
-	f.BasicTimer.SetWithTag(t, "first", ts.ToTime().Add(time.Second*2))
+	// f.BasicTimer.SetWithTag(t, "first", ts.Add(time.Second*2))
 	// time.Sleep(time.Second * 10)
 	return fmt.Sprintf("-%s-: %v", w, c)
 }

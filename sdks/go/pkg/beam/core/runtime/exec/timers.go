@@ -59,17 +59,12 @@ func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMa
 	if err != nil {
 		return timerProvider{}, err
 	}
-
-	win, err := EncodeWindow(u.wc, w)
-	if err != nil {
-		return timerProvider{}, err
-	}
 	tp := timerProvider{
 		ctx:          ctx,
 		tm:           manager,
 		elementKey:   elementKey,
 		SID:          u.SID,
-		window:       win,
+		window:       []typex.Window{w},
 		writersByKey: make(map[string]io.Writer),
 		codersByKey:  u.timerIDToCoder,
 	}
@@ -82,7 +77,7 @@ type timerProvider struct {
 	tm         TimerManager
 	SID        StreamID
 	elementKey []byte
-	window     []byte
+	window     []typex.Window
 
 	pn typex.PaneInfo
 

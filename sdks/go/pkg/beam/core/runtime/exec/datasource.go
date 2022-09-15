@@ -41,6 +41,7 @@ type DataSource struct {
 	PCol  PCollection // Handles size metrics. Value instead of pointer so it's initialized by default in tests.
 
 	source DataManager
+	timer  TimerManager
 	state  StateReader
 
 	index    int64
@@ -95,6 +96,7 @@ func (n *DataSource) StartBundle(ctx context.Context, id string, data DataContex
 	n.mu.Lock()
 	n.source = data.Data
 	n.state = data.State
+	n.timer = data.Timer
 	n.start = time.Now()
 	n.index = -1
 	n.splitIdx = math.MaxInt64

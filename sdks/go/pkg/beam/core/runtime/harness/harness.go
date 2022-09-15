@@ -393,9 +393,6 @@ func (c *control) handleInstruction(ctx context.Context, req *fnpb.InstructionRe
 		tokens := msg.GetCacheTokens()
 		c.cache.SetValidTokens(tokens...)
 
-		// if len(msg.GetElements()..GetTimers()) > 0 {
-		// 	panic(msg.GetElements().GetTimers())
-		// }
 		data := NewScopedDataManager(c.data, instID)
 		state := NewScopedStateReaderWithCache(c.state, instID, c.cache)
 		timer := NewScopedDataManager(c.timer, instID)

@@ -18,7 +18,8 @@ package timers
 
 import (
 	"reflect"
-	"time"
+
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
 )
 
 var (
@@ -37,7 +38,7 @@ type TimerMap struct {
 	Key                          string
 	Tag                          string
 	Clear                        bool
-	FireTimestamp, HoldTimestamp int64
+	FireTimestamp, HoldTimestamp mtime.Time
 }
 
 type Provider interface {
@@ -55,12 +56,12 @@ type EventTimeTimer struct {
 	Kind timeDomainEnum
 }
 
-func (t *EventTimeTimer) Set(p Provider, FiringTimestamp time.Time) {
-	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp.UnixMilli()})
+func (t *EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
 
-func (t *EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp time.Time) {
-	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp.UnixMilli()})
+func (t *EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
+	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
 }
 
 func (e EventTimeTimer) TimerKey() string {
