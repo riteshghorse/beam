@@ -23,33 +23,10 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 )
 
-//TODO(riteshghorse): are there constant model handlers?
-
-// type PythonCallableSource struct {
-// 	PythonCallableCode string
-// }
-
-// func NewPythonCallableSource(code string) PythonCallableSource {
-// 	return PythonCallableSource{PythonCallableCode: code}
-// }
-
-type Kwargs struct {
-	ModelHandlerProvider string `beam:"model_handler_provider"`
-	ModelURI             string `beam:"ModelURI"`
-}
-
-type Args struct {
-	args []string
-}
 type Payload struct {
-	Constructor string `beam:"constructor"`
-	Args        Args   `beam:"args"`
-	Kwargs      Kwargs `beam:"kwargs"`
+	args   []any          `beam:"args"`
+	kwargs map[string]any `beam.:"kwargs"`
 }
-
-// func (p *payload) addKwargs(key string, value string) {
-// 	p.Kwargs[key] = value
-// }
 
 type config struct {
 	pyld          Payload
@@ -59,16 +36,18 @@ type config struct {
 type configOption func(*config)
 
 // Sets keyword arguments for the python transform parameters.
-func WithKwarg(kwargs Kwargs) configOption {
+func WithKwarg(kwargs map[string]any) configOption {
 	return func(c *config) {
-		c.pyld.Kwargs = kwargs
+		for k, v := range kwargs {
+			c.pyld.kwargs[k] = v
+		}
 	}
 }
 
 // Sets arguments for the python transform parameters
-func WithArgs(args []string) configOption {
+func WithArgs(args []any) configOption {
 	return func(c *config) {
-		c.pyld.Args = Args{args: args}
+		c.pyld.args = append(c.pyld.args, args...)
 	}
 }
 
@@ -82,24 +61,26 @@ func WithExpansionAddr(expansionAddr string) configOption {
 // Actual RunInference
 func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("ml.inference.RunInference")
-
 	riPyld := &Payload{
-		Constructor: "apache_beam.ml.inference.base.RunInference.from_callable",
-		Args:        Args{},
-		Kwargs:      Kwargs{},
+		args:   []any{},
+		kwargs: make(map[string]any),
 	}
-	// riPyld.addKwargs("model_handler_provider", modelLoader)
+
 	cfg := config{pyld: *riPyld}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	// riPyld.addKwargs("model_handler_provider", modelLoader)
-	cfg.pyld.Kwargs.ModelHandlerProvider = modelLoader
+	cfg.pyld.kwargs["ModelHandlerProvider"] = modelLoader
 	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
 	}
-	pl := beam.CrossLanguagePayload(cfg.pyld)
+
+	pet := beam.NewPythonExternalTransform("apache_beam.ml.inference.base.RunInference.from_callable")
+
+	pet.WithArgs(cfg.pyld.args)
+	pet.WithKwargs(cfg.pyld.kwargs)
+	pl := beam.CrossLanguagePayload(pet)
 	namedInputs := map[string]beam.PCollection{"pcol1": col}
 	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInputs, beam.UnnamedOutput(typex.New(outT)))
 	return result[beam.UnnamedOutputTag()]

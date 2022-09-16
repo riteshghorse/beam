@@ -44,10 +44,9 @@ func TestRunInference(t *testing.T) {
 		},
 	}
 	input := beam.CreateList(s, inputRow)
-	// kwargs := map[string]string{
-	// 	"model_uri": "/tmp/staged/sklearn_model",
-	// }
-	kwargs := inference.Kwargs{ModelURI: "/tmp/staged/sklearn_model"}
+	kwargs := map[string]any{
+		"ModelURI": "/tmp/staged/sklearn_model",
+	}
 	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, reflect.TypeOf((*TestRow)(nil)).Elem(), inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
 
 	passert.Equals(s, outCol, row0, row1)

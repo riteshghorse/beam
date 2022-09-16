@@ -16,6 +16,9 @@
 package beam
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/graphx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
@@ -104,5 +107,48 @@ func TryExternalTagged(
 	edge := graph.NewTaggedExternal(s.real, s.scope, &ext, inboundLinks, outboundLinks, bounded)
 
 	namedOutputs := graphx.OutboundTagToNode(edge.Payload.OutputsMap, edge.Output)
+
 	return mapNodeToPCollection(namedOutputs), nil
+}
+
+func NewPythonExternalTransform(constructor string) *pythonExternalTransform {
+	return &pythonExternalTransform{Constructor: constructor}
+}
+
+// PythonExternalTransform holds the details required for an External Python Transform.
+type pythonExternalTransform struct {
+	Constructor string        `beam:"constructor"`
+	Args        reflect.Value `beam:"args"`
+	Kwargs      reflect.Value `beam:"kwargs"`
+}
+
+// WithArgs builds a struct from the given arguments required by the External Python Transform.
+func (p *pythonExternalTransform) WithArgs(args []any) {
+	fields := []reflect.StructField{}
+	for i, v := range args {
+		fields = append(fields, reflect.StructField{Name: fmt.Sprintf("Field%d", i), Type: reflect.TypeOf(v)})
+	}
+
+	argStruct := reflect.StructOf(fields)
+	values := reflect.New(argStruct).Elem()
+	for i := 0; i < argStruct.NumField(); i++ {
+		values.Field(i).Set(reflect.ValueOf(args[i]))
+	}
+	p.Args = values
+}
+
+// WithKwargs builds a struct from the given keyworf arguments required by the External Python Transform.
+func (p *pythonExternalTransform) WithKwargs(kwargs map[string]any) {
+	fields := []reflect.StructField{}
+	for k, v := range kwargs {
+		fields = append(fields, reflect.StructField{Name: k, Type: reflect.TypeOf(v)})
+	}
+
+	argStruct := reflect.StructOf(fields)
+	values := reflect.New(argStruct).Elem()
+	for i := 0; i < argStruct.NumField(); i++ {
+		values.Field(i).Set(reflect.ValueOf(kwargs[argStruct.Field(i).Name]))
+	}
+
+	p.Kwargs = values
 }
