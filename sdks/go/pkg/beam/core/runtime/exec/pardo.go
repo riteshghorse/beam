@@ -18,6 +18,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"io"
 	"path"
 	"reflect"
 
@@ -50,9 +51,9 @@ type ParDo struct {
 	inv      *invoker
 	bf       *bundleFinalizer
 	we       sdf.WatermarkEstimator
-
-	reader StateReader
-	cache  *cacheElm
+	tr       io.ReadCloser
+	reader   StateReader
+	cache    *cacheElm
 
 	status Status
 	err    errorx.GuardedError
@@ -126,6 +127,19 @@ func (n *ParDo) StartBundle(ctx context.Context, id string, data DataContext) er
 		return n.fail(err)
 	}
 
+	log.Debug(n.ctx, "reading timer")
+	if n.Timer != nil {
+		r, err := n.timerManager.OpenTimerRead(n.ctx, n.Timer.(*userTimerAdapter).SID)
+		if err != nil {
+			panic(err)
+		}
+		log.Debug(n.ctx, "opened timer stream")
+		defer r.Close()
+		// var b []byte
+		// r.Read(b)
+		n.tr = r
+		log.Debug(n.ctx, "timer read init")
+	}
 	// TODO(BEAM-3303): what to set for StartBundle/FinishBundle window and emitter timestamp?
 
 	if _, err := n.invokeDataFn(n.ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, n.Fn.StartBundleFn(), nil); err != nil {
@@ -142,18 +156,13 @@ func (n *ParDo) ProcessElement(_ context.Context, elm *FullValue, values ...ReSt
 
 	n.states.Set(n.ctx, metrics.ProcessBundle)
 
-	log.Debug(n.ctx, "reading timer")
-	if n.Timer != nil {
-		r, err := n.timerManager.OpenTimerRead(n.ctx, n.Timer.(*userTimerAdapter).SID)
-		if err != nil {
-			panic(err)
-		}
-		log.Debug(n.ctx, "opened timer stream")
-		defer r.Close()
-		var b []byte
-		r.Read(b)
-		log.Debugf(n.ctx, "timer read: %v", b)
-	}
+	log.Debug(n.ctx, "starting to read timer in process")
+	// if n.Timer != nil {
+
+	// 	var b []byte
+	// 	n.tr.Read(b)
+	// 	log.Debugf(n.ctx, "timer read: %v", b)
+	// }
 
 	return n.processMainInput(&MainInput{Key: *elm, Values: values})
 }

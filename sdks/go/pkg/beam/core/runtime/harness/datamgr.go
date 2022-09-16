@@ -76,6 +76,7 @@ func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID)
 	ch.mu.Lock()
 	ch.isTimer = true
 	ch.mu.Unlock()
+	log.Infof(ctx, "client in opentimer read: %v, port: %v", s.instID, id.Port)
 	return ch.OpenTimerRead(ctx, id.PtransformID, s.instID), nil
 }
 
@@ -258,10 +259,10 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 
 // OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) io.ReadCloser {
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cid := clientID{ptransformID: ptransformID, instID: instID}
+
 	if c.readErr != nil {
 		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
 		return &errReader{c.readErr}
@@ -271,7 +272,6 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
 func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, instID instructionID, key string) io.WriteCloser {
-	// log.Fatalf(ctx, "tfd: %v", key) -- key is coming out empty string
 	return c.makeWriter(ctx, clientID{ptransformID: ptransformID, instID: instID}, key)
 }
 
@@ -316,7 +316,7 @@ func (c *DataChannel) read(ctx context.Context) {
 		// Each message may contain segments for multiple streams, so we
 		// must treat each segment in isolation. We maintain a local cache
 		// to reduce lock contention.
-		// if !c.isTimer {
+
 		for _, elm := range msg.GetData() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
 
@@ -373,10 +373,10 @@ func (c *DataChannel) read(ctx context.Context) {
 				close(r.buf)
 			}
 		}
-		// }
 
 		for _, elm := range msg.GetTimers() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
+			log.Infof(ctx, "datachannel read cid: %v, c.id: %v", id, c.id)
 			if len(elm.GetTimers()) > 0 {
 				log.Infof(ctx, "timer received from: %#v", elm)
 
@@ -418,18 +418,6 @@ func (c *DataChannel) read(ctx context.Context) {
 				if !r.completed {
 					// Use the last segment if any.
 					if len(elm.GetTimers()) != 0 {
-						// b := elm.GetTimers()
-						// br := bytes.NewReader(b)
-						// key, err := coder.DecodeStringUTF8(br)
-						// if err != nil {
-						// 	panic(err)
-						// }
-						// tag, err := coder.DecodeStringUTF8(br)
-						// if err != nil {
-						// 	panic(err)
-						// }
-						// panic(fmt.Sprintf("Key: %v, tag: %v", key, tag))
-						// In case of local side closing, send with select.
 						select {
 						case r.buf <- elm.GetTimers():
 						case <-r.done:
@@ -462,19 +450,6 @@ func (c *DataChannel) read(ctx context.Context) {
 			// will be marked as completed and further remote data will be ignored.
 			select {
 			case r.buf <- elm.GetTimers():
-				// if len(elm.GetTimers()) > 0 {
-				// 	b := elm.GetTimers()
-				// 	br := bytes.NewReader(b)
-				// 	key, err := coder.DecodeStringUTF8(br)
-				// 	if err != nil {
-				// 		panic(err)
-				// 	}
-				// 	tag, err := coder.DecodeStringUTF8(br)
-				// 	if err != nil {
-				// 		panic(err)
-				// 	}
-				// 	panic(fmt.Sprintf("key: %v, tag: %v", key, tag))
-				// }
 			case <-r.done:
 				r.completed = true
 				close(r.buf)
