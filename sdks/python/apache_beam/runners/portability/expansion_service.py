@@ -74,12 +74,13 @@ class ExpansionServiceServicer(
         raise ValueError(
             'type annotation for multiple outputs is not allowed yet: %s' %
             request.output_coder_requests)
-      inputs = transform._pvaluish_from_dict({
-          tag:
-          with_pipeline(context.pcollections.get_by_id(pcoll_id), pcoll_id)
-          for tag,
-          pcoll_id in request.transform.inputs.items()
-      })
+      # inputs = transform._pvaluish_from_dict({
+      #     tag:
+      #     with_pipeline(context.pcollections.get_by_id(pcoll_id), pcoll_id)
+      #     for tag,
+      #     pcoll_id in request.transform.inputs.items()
+      # })
+      inputs = pipeline
       if not inputs:
         inputs = pipeline
       with external.ExternalTransform.outer_namespace(request.namespace):

@@ -18,6 +18,7 @@ package xlang
 import (
 	"flag"
 	"log"
+	"reflect"
 	"testing"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
@@ -27,9 +28,13 @@ import (
 	"github.com/apache/beam/sdks/v2/go/test/integration"
 )
 
+func init() {
+	beam.RegisterType(reflect.TypeOf((*TestRow)(nil)).Elem())
+}
+
 type TestRow struct {
-	a int64
-	b int32
+	A int64 `beam:"A"`
+	B int32 `beam:"B"`
 }
 
 func TestDataframe(t *testing.T) {
@@ -49,10 +54,10 @@ func TestDataframe(t *testing.T) {
 	checkFlags(t)
 
 	// ctx := context.Background()
-	row0 := TestRow{a: int64(100), b: int32(1)}
-	row1 := TestRow{a: int64(100), b: int32(2)}
-	// row2 := TestRow{a: int64(100), b: int32(3)}
-	row3 := TestRow{a: int64(200), b: int32(4)}
+	row0 := TestRow{A: int64(100), B: int32(1)}
+	row1 := TestRow{A: int64(100), B: int32(2)}
+	// row2 := TestRow{A; int64(100), B:  int32(3)}
+	row3 := TestRow{A: int64(200), B: int32(4)}
 
 	p, s := beam.NewPipelineWithRoot()
 

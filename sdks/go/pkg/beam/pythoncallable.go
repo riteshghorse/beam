@@ -32,18 +32,18 @@ func init() {
 	RegisterSchemaProviderWithURN(pcsType, &PythonCallableSourceProvider{}, pythonCallableUrn)
 }
 
-type pythonCode struct {
-	code string
+type PythonCode struct {
+	Code string
 }
 
-func PythonCode(code string) pythonCode {
-	return pythonCode{code}
+func NewPythonCode(code string) PythonCode {
+	return PythonCode{code}
 }
 
-type PythonCallableSource pythonCode
+type PythonCallableSource PythonCode
 
 func (p PythonCallableSource) GetCode() string {
-	return p.code
+	return p.Code
 }
 
 type pcsStorage struct {

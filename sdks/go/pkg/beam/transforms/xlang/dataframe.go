@@ -23,12 +23,13 @@ import (
 
 func init() {
 	beam.RegisterType(reflect.TypeOf((*config)(nil)).Elem())
-
+	beam.RegisterType(reflect.TypeOf((*DataframePl)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*Payload)(nil)).Elem())
 }
 
 type config struct {
-	includeIndexes bool
-	expansionAddr  string
+	dpl           DataframePl
+	expansionAddr string
 }
 
 type configOption func(*config)
@@ -43,14 +44,27 @@ func WithExpansionAddr(expansionAddr string) configOption {
 // WithIndexes sets an URL for a Python expansion service.
 func WithIndexes() configOption {
 	return func(c *config) {
-		c.includeIndexes = true
+		c.dpl.IncludeIndexes = true
 	}
+}
+
+type DataframePl struct {
+	Fn             string `beam:"func"`
+	IncludeIndexes bool   `beam:"include_indexes"`
+}
+
+type Payload struct {
+	Constructor string      `beam:"constructor"`
+	Args        []string    `beam:"args"`
+	Kwargs      DataframePl `beam:"kwargs"`
 }
 
 func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...configOption) beam.PCollection {
 	s.Scope("xlang.DataframeTransform")
-
-	cfg := config{}
+	// beam.PythonCallableSource(beam.NewPythonCode(fn))
+	cfg := config{
+		dpl: DataframePl{Fn: fn},
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -59,12 +73,17 @@ func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...c
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for xlang.DataframeTransform(), pass xlang.WithExpansionAddr(address) as a param.")
 	}
-	pet := beam.NewPythonExternalTransform("apache_beam.dataframe.transforms.DataframeTransform")
-	pet.WithKwargs(map[string]any{
-		"Func":           beam.PythonCallableSource(beam.PythonCode(fn)),
-		"IncludeIndexes": cfg.includeIndexes,
-	})
-	pl := beam.CrossLanguagePayload(pet)
+	pal := Payload{
+		Constructor: "apache_beam.dataframe.transforms.DataframeTransform",
+		Kwargs:      cfg.dpl,
+		Args:        []string{},
+	}
+	// pet := beam.NewPythonExternalTransform("apache_beam.dataframe.transforms.DataframeTransform")
+	// pet.WithKwargs(map[string]any{
+	// 	"Func":           beam.PythonCallableSource(beam.PythonCode(fn)),
+	// 	"IncludeIndexes": cfg.includeIndexes,
+	// })
+	pl := beam.CrossLanguagePayload(pal)
 	// namedInputs := map[string]beam.PCollection{"pcol1": col}
 	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(col.Type()))
 	return result[beam.UnnamedOutputTag()]
