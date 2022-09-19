@@ -77,6 +77,18 @@ func RegisterSchemaProvider(rt reflect.Type, provider interface{}) {
 	coder.RegisterSchemaProviders(rt, p.BuildEncoder, p.BuildDecoder)
 }
 
+func RegisterSchemaProviderWithURN(rt reflect.Type, provider interface{}, urn string) {
+	p := provider.(SchemaProvider)
+
+	st, err := p.FromLogicalType(rt)
+	if err != nil {
+		panic(fmt.Sprintf("beam.RegisterSchemaProvider: schema type provider for %v, doesn't support that type", rt))
+	}
+	schema.RegisterLogicalType(schema.ToLogicalType(urn, rt, st))
+
+	coder.RegisterSchemaProviders(rt, p.BuildEncoder, p.BuildDecoder)
+}
+
 // SchemaProvider specializes schema handling for complex types, including conversion to a
 // valid schema base type,
 //

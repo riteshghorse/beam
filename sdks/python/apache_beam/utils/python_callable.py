@@ -50,6 +50,7 @@ class PythonCallableWithSource(object):
 
   @classmethod
   def load_from_source(cls, source):
+    print("printing source", source)
     if source in __builtins__:
       return cls.load_from_expression(source)
     elif all(s.isidentifier() for s in source.split('.')):

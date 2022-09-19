@@ -70,6 +70,12 @@ type InfPayload struct {
 	Kwargs      KwargsStruct `beam:"kwargs"`
 }
 
+type PythonCallableSource string
+
+func (s PythonCallableSource) String() string {
+	return string(s)
+}
+
 // Actual RunInference
 func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("ml.inference.RunInference")
@@ -85,7 +91,7 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT r
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	cfg.pyld.Kwargs.ModelHandlerProvider = modelLoader
+	cfg.pyld.Kwargs.ModelHandlerProvider = beam.PythonCallableSource(beam.PythonCode(modelLoader))
 	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
