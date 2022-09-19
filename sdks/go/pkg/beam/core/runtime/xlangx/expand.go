@@ -97,6 +97,7 @@ func expand(
 	if config != ext.ExpansionAddr {
 		ext.ExpansionAddr = config
 	}
+	// comps.Transforms[transform.UniqueName] = transform
 	return h(ctx, &HandlerParams{
 		Config: config,
 		Req: &jobpb.ExpansionRequest{

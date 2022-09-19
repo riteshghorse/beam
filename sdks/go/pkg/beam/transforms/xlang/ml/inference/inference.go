@@ -29,25 +29,23 @@ type Payload struct {
 }
 
 type config struct {
-	pyld          Payload
+	pyld          InfPayload
 	expansionAddr string
 }
 
 type configOption func(*config)
 
 // Sets keyword arguments for the python transform parameters.
-func WithKwarg(kwargs map[string]any) configOption {
+func WithKwarg(kwargs KwargsStruct) configOption {
 	return func(c *config) {
-		for k, v := range kwargs {
-			c.pyld.kwargs[k] = v
-		}
+		c.pyld.Kwargs = kwargs
 	}
 }
 
 // Sets arguments for the python transform parameters
-func WithArgs(args []any) configOption {
+func WithArgs(args []string) configOption {
 	return func(c *config) {
-		c.pyld.args = append(c.pyld.args, args...)
+		c.pyld.Args.args = append(c.pyld.Args.args, args...)
 	}
 }
 
@@ -58,29 +56,46 @@ func WithExpansionAddr(expansionAddr string) configOption {
 	}
 }
 
+type ArgStruct struct {
+	args []string
+}
+
+type KwargsStruct struct {
+	ModelHandlerProvider beam.PythonCallableSource `beam:"model_handler_provider"`
+	ModelURI             string                    `beam:"model_uri"`
+}
+type InfPayload struct {
+	Constructor string       `beam:"constructor"`
+	Args        ArgStruct    `beam:"args"`
+	Kwargs      KwargsStruct `beam:"kwargs"`
+}
+
 // Actual RunInference
 func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("ml.inference.RunInference")
-	riPyld := &Payload{
-		args:   []any{},
-		kwargs: make(map[string]any),
-	}
+	// riPyld := &Payload{
+	// 	args:   []any{},
+	// 	kwargs: make(map[string]any),
+	// }
 
-	cfg := config{pyld: *riPyld}
+	riPyld := InfPayload{
+		Constructor: "apache_beam.ml.inference.base.RunInference.from_callable",
+	}
+	cfg := config{pyld: riPyld}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	cfg.pyld.kwargs["ModelHandlerProvider"] = modelLoader
+	cfg.pyld.Kwargs.ModelHandlerProvider = modelLoader
 	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
 	}
 
-	pet := beam.NewPythonExternalTransform("apache_beam.ml.inference.base.RunInference.from_callable")
+	// pet := beam.NewPythonExternalTransform("apache_beam.ml.inference.base.RunInference.from_callable")
 
-	pet.WithArgs(cfg.pyld.args)
-	pet.WithKwargs(cfg.pyld.kwargs)
-	pl := beam.CrossLanguagePayload(pet)
+	// pet.WithArgs(cfg.pyld.args)
+	// pet.WithKwargs(cfg.pyld.kwargs)
+	pl := beam.CrossLanguagePayload(cfg.pyld)
 	namedInputs := map[string]beam.PCollection{"pcol1": col}
 	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInputs, beam.UnnamedOutput(typex.New(outT)))
 	return result[beam.UnnamedOutputTag()]

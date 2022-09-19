@@ -82,7 +82,7 @@ class FullyQualifiedNamedTransform(ptransform.PTransform):
 
   @classmethod
   def _resolve(cls, fully_qualified_name):
-    cls._check_allowed(fully_qualified_name)
+    # cls._check_allowed(fully_qualified_name)
     o = None
     path = ''
     for segment in fully_qualified_name.split('.'):
