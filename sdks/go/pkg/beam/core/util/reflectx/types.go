@@ -43,6 +43,8 @@ var (
 	Context   = reflect.TypeOf((*context.Context)(nil)).Elem()
 	Type      = reflect.TypeOf((*reflect.Type)(nil)).Elem()
 	ByteSlice = reflect.TypeOf((*[]byte)(nil)).Elem()
+
+	PythonCallable = reflect.TypeOf((*string)(nil)).Elem()
 )
 
 // IsNumber returns true iff the given type is an integer, float, or complex.

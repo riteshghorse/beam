@@ -109,3 +109,27 @@ func (e *ExpansionServiceRunner) StopService() error {
 	}
 	return expansionProcess.Kill()
 }
+
+type PythonService struct {
+	module string
+	args   []string
+}
+
+func NewPythonService(module string, args []string) *PythonService {
+	return &PythonService{
+		module: module,
+		args:   args,
+	}
+}
+
+func (s *PythonService) StartService() error {
+	// setup python environment from resource script
+
+	setupCmd := exec.Command("python3", "../resources/bootstrap_beam_venv.py")
+	err := setupCmd.Start()
+	if err != nil {
+		return fmt.Errorf("error setting up python environment: %v", err)
+	}
+
+	return nil
+}

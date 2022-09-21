@@ -21,7 +21,16 @@ import (
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 )
+
+func init() {
+	beam.RegisterType(reflect.TypeOf((*Payload)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*config)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*ArgStruct)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*KwargsStruct)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*InfPayload)(nil)).Elem())
+}
 
 type Payload struct {
 	args   []any          `beam:"args"`
@@ -60,9 +69,11 @@ type ArgStruct struct {
 	args []string
 }
 
+var pt = typex.New(reflectx.PythonCallable)
+
 type KwargsStruct struct {
-	ModelHandlerProvider beam.PythonCallableSource `beam:"model_handler_provider"`
-	ModelURI             string                    `beam:"model_uri"`
+	ModelHandlerProvider pt.Type() `beam:"model_handler_provider"`
+	ModelURI             string  `beam:"model_uri"`
 }
 type InfPayload struct {
 	Constructor string       `beam:"constructor"`
@@ -70,10 +81,8 @@ type InfPayload struct {
 	Kwargs      KwargsStruct `beam:"kwargs"`
 }
 
-type PythonCallableSource string
-
-func (s PythonCallableSource) String() string {
-	return string(s)
+type PythonCallableSource struct {
+	Code string
 }
 
 // Actual RunInference
@@ -91,7 +100,9 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT r
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	cfg.pyld.Kwargs.ModelHandlerProvider = beam.PythonCallableSource(beam.PythonCode(modelLoader))
+	cfg.pyld.Kwargs.ModelHandlerProvider = PythonCallableSource{modelLoader}
+
+	// cfg.pyld.Kwargs.ModelHandlerProvider = beam.PythonCallableSource(beam.PythonCode(modelLoader))
 	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")

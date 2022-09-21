@@ -158,3 +158,10 @@ func TestStopService_AlreadyStopped(t *testing.T) {
 		t.Errorf("StopSercvice succeeded when it should have failed")
 	}
 }
+
+func TestPythonService(t *testing.T) {
+	ps := NewPythonService("", []string{})
+	if err := ps.StartService(); err != nil {
+		t.Fatalf("can't start python service: %v", err)
+	}
+}
