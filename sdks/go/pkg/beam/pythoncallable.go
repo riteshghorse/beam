@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 )
 
 const (
@@ -29,34 +30,16 @@ const (
 
 var (
 	pcsType        = reflect.TypeOf((*PythonCallableSource)(nil)).Elem()
-	pcsStorageType = reflect.TypeOf((*pcsStorage)(nil)).Elem()
-	pythonCodeType = reflect.TypeOf((*pythonCode)(nil)).Elem()
+	pcsStorageType = reflectx.String
 )
 
 func init() {
 	RegisterType(pcsType)
-	RegisterType(pcsStorageType)
-	RegisterType(pythonCodeType)
+	// RegisterType(pcsStorageType)
 	RegisterSchemaProviderWithURN(pcsType, &PythonCallableSourceProvider{}, pythonCallableUrn)
 }
 
-type pythonCode struct {
-	Code string
-}
-
-func PythonCode(code string) pythonCode {
-	return pythonCode{code}
-}
-
-type PythonCallableSource pythonCode
-
-func (p PythonCallableSource) GetCode() string {
-	return p.Code
-}
-
-type pcsStorage struct {
-	Code string
-}
+type PythonCallableSource string
 
 type PythonCallableSourceProvider struct{}
 
@@ -64,7 +47,7 @@ func (p *PythonCallableSourceProvider) FromLogicalType(rt reflect.Type) (reflect
 	if rt != pcsType {
 		return nil, fmt.Errorf("unable to provide schema.LogicalType for type %v, want %v", rt, pcsType)
 	}
-	return pythonCodeType, nil
+	return pcsStorageType, nil
 }
 
 func (p *PythonCallableSourceProvider) BuildEncoder(rt reflect.Type) (func(interface{}, io.Writer) error, error) {
@@ -72,15 +55,13 @@ func (p *PythonCallableSourceProvider) BuildEncoder(rt reflect.Type) (func(inter
 		return nil, err
 	}
 
-	enc, err := coder.RowEncoderForStruct(pcsStorageType)
-	if err != nil {
-		return nil, err
-	}
+	// enc := exec.MakeElementDecoder(coder.NewString())
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return func(iface interface{}, w io.Writer) error {
 		v := iface.(PythonCallableSource)
-		return enc(pcsStorage{
-			Code: v.GetCode(),
-		}, w)
+		return coder.EncodeStringUTF8(string(v), w)
 	}, nil
 }
 
@@ -88,16 +69,22 @@ func (p *PythonCallableSourceProvider) BuildDecoder(rt reflect.Type) (func(io.Re
 	if _, err := p.FromLogicalType(rt); err != nil {
 		return nil, err
 	}
-	dec, err := coder.RowDecoderForStruct(pcsStorageType)
-	if err != nil {
-		return nil, err
-	}
+	// dec, err := coder.RowDecoderForStruct(pcsStorageType)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return func(r io.Reader) (interface{}, error) {
-		s, err := dec(r)
+		// s, err := dec(r)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		// tn := s.(pcsStorage)
+
+		// return PythonCode(tn.Code), nil
+		s, err := coder.DecodeStringUTF8(r)
 		if err != nil {
 			return nil, err
 		}
-		tn := s.(pcsStorage)
-		return PythonCode(tn.Code), nil
+		return PythonCallableSource(s), nil
 	}, nil
 }

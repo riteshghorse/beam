@@ -35,6 +35,7 @@ func TestRunInference(t *testing.T) {
 
 	p, s := beam.NewPipelineWithRoot()
 
+	beam.Impulse(s)
 	inputRow := []TestRow{
 		{
 			Example: []int64{0, 0},

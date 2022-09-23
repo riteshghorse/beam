@@ -166,6 +166,7 @@ func preRegLogicalTypes(r *Registry) {
 	r.RegisterLogicalType(ToLogicalType("uint32", reflectx.Uint32, reflectx.Int32))
 	r.RegisterLogicalType(ToLogicalType("uint64", reflectx.Uint64, reflectx.Int64))
 	r.RegisterLogicalType(ToLogicalType("uint", reflectx.Uint, reflectx.Int64))
+	r.RegisterLogicalType(ToLogicalType("beam:logical_type:python_callable:v1", reflectx.PythonCallable, reflectx.String))
 }
 
 func init() {

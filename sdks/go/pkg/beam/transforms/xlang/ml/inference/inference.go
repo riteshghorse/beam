@@ -70,19 +70,9 @@ type InfPayload struct {
 	Kwargs      KwargsStruct `beam:"kwargs"`
 }
 
-type PythonCallableSource string
-
-func (s PythonCallableSource) String() string {
-	return string(s)
-}
-
 // Actual RunInference
 func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("ml.inference.RunInference")
-	// riPyld := &Payload{
-	// 	args:   []any{},
-	// 	kwargs: make(map[string]any),
-	// }
 
 	riPyld := InfPayload{
 		Constructor: "apache_beam.ml.inference.base.RunInference.from_callable",
@@ -91,16 +81,12 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT r
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	cfg.pyld.Kwargs.ModelHandlerProvider = beam.PythonCallableSource(beam.PythonCode(modelLoader))
+	cfg.pyld.Kwargs.ModelHandlerProvider = beam.PythonCallableSource(modelLoader)
 	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
 		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
 	}
 
-	// pet := beam.NewPythonExternalTransform("apache_beam.ml.inference.base.RunInference.from_callable")
-
-	// pet.WithArgs(cfg.pyld.args)
-	// pet.WithKwargs(cfg.pyld.kwargs)
 	pl := beam.CrossLanguagePayload(cfg.pyld)
 	namedInputs := map[string]beam.PCollection{"pcol1": col}
 	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInputs, beam.UnnamedOutput(typex.New(outT)))
