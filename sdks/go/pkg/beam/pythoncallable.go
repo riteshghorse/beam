@@ -21,39 +21,25 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/reflectx"
 )
 
 const (
 	pythonCallableUrn = "beam:logical_type:python_callable:v1"
 )
 
-func init() {
+var (
+	pcsType        = reflect.TypeOf((*PythonCallableSource)(nil)).Elem()
+	pcsStorageType = reflectx.String
+)
 
+func init() {
+	RegisterType(pcsType)
+	// RegisterType(pcsStorageType)
 	RegisterSchemaProviderWithURN(pcsType, &PythonCallableSourceProvider{}, pythonCallableUrn)
 }
 
-type PythonCode struct {
-	Code string
-}
-
-func NewPythonCode(code string) PythonCode {
-	return PythonCode{code}
-}
-
-type PythonCallableSource PythonCode
-
-func (p PythonCallableSource) GetCode() string {
-	return p.Code
-}
-
-type pcsStorage struct {
-	pythonCallableCode string
-}
-
-var (
-	pcsType        = reflect.TypeOf((*PythonCallableSource)(nil)).Elem()
-	pcsStorageType = reflect.TypeOf((*pcsStorage)(nil)).Elem()
-)
+type PythonCallableSource string
 
 type PythonCallableSourceProvider struct{}
 
@@ -68,15 +54,14 @@ func (p *PythonCallableSourceProvider) BuildEncoder(rt reflect.Type) (func(inter
 	if _, err := p.FromLogicalType(rt); err != nil {
 		return nil, err
 	}
-	enc, err := coder.RowEncoderForStruct(pcsStorageType)
-	if err != nil {
-		return nil, err
-	}
+
+	// enc := exec.MakeElementDecoder(coder.NewString())
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return func(iface interface{}, w io.Writer) error {
 		v := iface.(PythonCallableSource)
-		return enc(pcsStorage{
-			pythonCallableCode: v.GetCode(),
-		}, w)
+		return coder.EncodeStringUTF8(string(v), w)
 	}, nil
 }
 
@@ -84,16 +69,22 @@ func (p *PythonCallableSourceProvider) BuildDecoder(rt reflect.Type) (func(io.Re
 	if _, err := p.FromLogicalType(rt); err != nil {
 		return nil, err
 	}
-	dec, err := coder.RowDecoderForStruct(pcsStorageType)
-	if err != nil {
-		return nil, err
-	}
+	// dec, err := coder.RowDecoderForStruct(pcsStorageType)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return func(r io.Reader) (interface{}, error) {
-		s, err := dec(r)
+		// s, err := dec(r)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		// tn := s.(pcsStorage)
+
+		// return PythonCode(tn.Code), nil
+		s, err := coder.DecodeStringUTF8(r)
 		if err != nil {
 			return nil, err
 		}
-		tn := s.(pcsStorage)
-		return PythonCallableSource{tn.pythonCallableCode}, nil
+		return PythonCallableSource(s), nil
 	}, nil
 }

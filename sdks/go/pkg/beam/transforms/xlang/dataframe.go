@@ -49,8 +49,8 @@ func WithIndexes() configOption {
 }
 
 type DataframePl struct {
-	Fn             string `beam:"func"`
-	IncludeIndexes bool   `beam:"include_indexes"`
+	Fn             beam.PythonCallableSource `beam:"func"`
+	IncludeIndexes bool                      `beam:"include_indexes"`
 }
 
 type Payload struct {
@@ -63,7 +63,7 @@ func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...c
 	s.Scope("xlang.DataframeTransform")
 	// beam.PythonCallableSource(beam.NewPythonCode(fn))
 	cfg := config{
-		dpl: DataframePl{Fn: fn},
+		dpl: DataframePl{Fn: beam.PythonCallableSource(fn)},
 	}
 	for _, opt := range opts {
 		opt(&cfg)

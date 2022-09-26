@@ -33,8 +33,8 @@ func init() {
 }
 
 type TestRow struct {
-	A int64 `beam:"A"`
-	B int32 `beam:"B"`
+	A int64 `beam:"a"`
+	B int32 `beam:"b"`
 }
 
 func TestDataframe(t *testing.T) {
