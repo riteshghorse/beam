@@ -29,8 +29,12 @@ func checkFlags(t *testing.T) {
 }
 
 type TestRow struct {
-	Example   []int64
-	Inference int32
+	Example   []int64 `beam:"example"`
+	Inference int32   `beam:"inference"`
+}
+
+type Row struct {
+	Values []int64
 }
 
 func TestRunInference(t *testing.T) {
@@ -46,12 +50,18 @@ func TestRunInference(t *testing.T) {
 	beam.Impulse(s)
 	inputRow := []TestRow{
 		{
-			Example: []int64{0, 0},
+			Example:   []int64{0, 0},
+			Inference: 0,
 		},
 		{
-			Example: []int64{1, 1},
+			Example:   []int64{1, 1},
+			Inference: 0,
 		},
 	}
+	// inputRow := []Row{
+	// 	{Values: []int64{0, 0}},
+	// 	{Values: []int64{1, 1}},
+	// }
 	input := beam.CreateList(s, inputRow)
 	// kwargs := map[string]any{
 	// 	"ModelURI": "/tmp/staged/sklearn_model",

@@ -56,6 +56,7 @@ def to_dataframe(
 
   A proxy object must be given if the schema for the PCollection is not known.
   """
+  print("printing pcol:", pcoll)
   if proxy is None:
     if pcoll.element_type is None:
       raise ValueError(
@@ -70,6 +71,8 @@ def to_dataframe(
       label = 'BatchElements(%s)' % _var_name(pcoll, 2)
     proxy = schemas.generate_proxy(pcoll.element_type)
     pcoll = pcoll | label >> schemas.BatchRowsAsDataFrame(proxy=proxy)
+  
+  print("printing pcol:", pcoll)
   return frame_base.DeferredFrame.wrap(
       expressions.PlaceholderExpression(proxy, pcoll))
 
