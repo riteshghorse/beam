@@ -23,6 +23,14 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 )
 
+func init() {
+	beam.RegisterType(reflect.TypeOf((*Payload)(nil)))
+	beam.RegisterType(reflect.TypeOf((*config)(nil)))
+	beam.RegisterType(reflect.TypeOf((*ArgStruct)(nil)))
+	beam.RegisterType(reflect.TypeOf((*KwargsStruct)(nil)))
+	beam.RegisterType(reflect.TypeOf((*InfPayload)(nil)))
+}
+
 type Payload struct {
 	args   []any          `beam:"args"`
 	kwargs map[string]any `beam.:"kwargs"`
@@ -88,7 +96,6 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, outT r
 	}
 
 	pl := beam.CrossLanguagePayload(cfg.pyld)
-	namedInputs := map[string]beam.PCollection{"pcol1": col}
-	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInputs, beam.UnnamedOutput(typex.New(outT)))
+	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(typex.New(outT)))
 	return result[beam.UnnamedOutputTag()]
 }
