@@ -227,8 +227,6 @@ func (b *CoderUnmarshaller) makeCoder(id string, c *pipepb.Coder) (*coder.Coder,
 		switch elm.GetSpec().GetUrn() {
 		case urnIterableCoder, urnStateBackedIterableCoder:
 			id = elm.GetComponentCoderIds()[0]
-			kind = coder.CoGBK
-			root = typex.CoGBKType
 
 			// TODO(https://github.com/apache/beam/issues/18032): If CoGBK with > 1 input, handle as special GBK. We expect
 			// it to be encoded as CoGBK<K,LP<CoGBKList<V,W,..>>>. Remove this handling once
@@ -236,7 +234,8 @@ func (b *CoderUnmarshaller) makeCoder(id string, c *pipepb.Coder) (*coder.Coder,
 
 			if ids, ok := b.isCoGBKList(id); ok {
 				// CoGBK<K,V,W,..>
-
+				kind = coder.CoGBK
+				root = typex.CoGBKType
 				values, err := b.Coders(ids)
 				if err != nil {
 					return nil, err
@@ -539,6 +538,14 @@ func (b *CoderMarshaller) Add(c *coder.Coder) (string, error) {
 
 	// TODO(https://github.com/apache/beam/issues/20510): Handle coder.Timer support.
 
+	case coder.Iterable:
+		comp := []string{}
+		ids, err := b.AddMulti(c.Components)
+		if err != nil {
+			return "", errors.SetTopLevelMsgf(err, "failed to marshal iterable coder %v", c)
+		}
+		comp = append(comp, ids...)
+		return b.internBuiltInCoder(urnIterableCoder, comp...), nil
 	default:
 		err := errors.Errorf("unexpected coder kind: %v", c.Kind)
 		return "", errors.WithContextf(err, "failed to marshal coder %v", c)

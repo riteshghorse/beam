@@ -193,6 +193,7 @@ class SklearnModelHandlerPandas(ModelHandler[pandas.DataFrame,
     # vectorize data for better performance
     vectorized_batch = pandas.concat(batch, axis=0)
     predictions = model.predict(vectorized_batch)
+    print("predictions**: ", predictions)
     splits = [
         vectorized_batch.iloc[[i]] for i in range(vectorized_batch.shape[0])
     ]

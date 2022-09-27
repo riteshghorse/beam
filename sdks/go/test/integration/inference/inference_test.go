@@ -2,6 +2,7 @@ package inference
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"reflect"
 	"testing"
@@ -49,18 +50,21 @@ func TestRunInference(t *testing.T) {
 	p, s := beam.NewPipelineWithRoot()
 
 	beam.Impulse(s)
-	inputRow := []TestRow{
-		{
-			Example:   []int64{0, 0},
-			Inference: 0,
-		},
-		{
-			Example:   []int64{1, 1},
-			Inference: 0,
-		},
-	}
-	input := beam.CreateList(s, inputRow)
+	// inputRow := []TestRow{
+	// 	{
+	// 		Example:   []int64{0, 0},
+	// 		Inference: 0,
+	// 	},
+	// 	{
+	// 		Example:   []int64{1, 1},
+	// 		Inference: 0,
+	// 	},
+	// }
 
+	// inputRow := [][]int64{{0, 0}, {1, 1}}
+	// input := beam.CreateList(s, inputRow)
+	input := beam.Create(s, []int64{0, 0}, []int64{1, 1})
+	fmt.Println("coder***: ", input.Coder().String())
 	kwargs := inference.KwargsStruct{
 		ModelURI: "/tmp/staged/sklearn_model",
 	}
