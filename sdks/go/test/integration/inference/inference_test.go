@@ -19,6 +19,7 @@ import (
 
 func init() {
 	beam.RegisterType(reflect.TypeOf((*TestRow)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*Row)(nil)).Elem())
 }
 
 var expansionAddr string // Populate with expansion address labelled "python_transform"
@@ -58,14 +59,8 @@ func TestRunInference(t *testing.T) {
 			Inference: 0,
 		},
 	}
-	// inputRow := []Row{
-	// 	{Values: []int64{0, 0}},
-	// 	{Values: []int64{1, 1}},
-	// }
 	input := beam.CreateList(s, inputRow)
-	// kwargs := map[string]any{
-	// 	"ModelURI": "/tmp/staged/sklearn_model",
-	// }
+
 	kwargs := inference.KwargsStruct{
 		ModelURI: "/tmp/staged/sklearn_model",
 	}

@@ -65,6 +65,8 @@ func Expand(edge *graph.MultiEdge, ext *graph.ExternalTransform) error {
 		extTransform = transforms[extTransformID]
 	}
 
+	graphx.AddFakeImpulses(p)
+
 	// Scoping the ExternalTransform with respect to it's unique namespace, thus
 	// avoiding future collisions
 	addNamespace(extTransform, p.GetComponents(), ext.Namespace)
@@ -75,6 +77,8 @@ func Expand(edge *graph.MultiEdge, ext *graph.ExternalTransform) error {
 	if err != nil {
 		return err
 	}
+
+	graphx.RemoveFakeImpulses(res.GetComponents(), res.GetTransform())
 
 	exp := &graph.ExpandedTransform{
 		Components:   res.GetComponents(),
