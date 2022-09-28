@@ -56,17 +56,18 @@ func TestDataframe(t *testing.T) {
 	// ctx := context.Background()
 	row0 := TestRow{A: int64(100), B: int32(1)}
 	row1 := TestRow{A: int64(100), B: int32(2)}
-	// row2 := TestRow{A; int64(100), B:  int32(3)}
+	row2 := TestRow{A: int64(100), B: int32(3)}
 	row3 := TestRow{A: int64(200), B: int32(4)}
 
 	p, s := beam.NewPipelineWithRoot()
 
-	inputRow := []TestRow{
-		row0, row1, row3,
-	}
-	input := beam.CreateList(s, inputRow)
+	// inputRow := []TestRow{
+	// 	row0, row1, row3,
+	// }
+	// input := beam.CreateList(s, inputRow)
 
-	outCol := xlang.DataframeTransform(s, "lambda df: df.groupby('a').sum()", input, xlang.WithExpansionAddr(expansionAddr))
+	input := beam.Create(s, row0, row1, row2, row3)
+	outCol := xlang.DataframeTransform(s, "lambda df: df.groupby('a').sum()", input, reflect.TypeOf((*TestRow)(nil)).Elem(), xlang.WithExpansionAddr(expansionAddr), xlang.WithIndexes())
 
 	passert.NonEmpty(s, outCol)
 

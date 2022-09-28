@@ -19,12 +19,14 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 )
 
 func init() {
 	beam.RegisterType(reflect.TypeOf((*config)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*DataframePl)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*Payload)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*ArgStruct)(nil)).Elem())
 }
 
 type config struct {
@@ -53,13 +55,17 @@ type DataframePl struct {
 	IncludeIndexes bool                      `beam:"include_indexes"`
 }
 
+type ArgStruct struct {
+	args []string
+}
+
 type Payload struct {
 	Constructor string      `beam:"constructor"`
-	Args        []string    `beam:"args"`
+	Args        ArgStruct   `beam:"args"`
 	Kwargs      DataframePl `beam:"kwargs"`
 }
 
-func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...configOption) beam.PCollection {
+func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, outT reflect.Type, opts ...configOption) beam.PCollection {
 	s.Scope("xlang.DataframeTransform")
 	// beam.PythonCallableSource(beam.NewPythonCode(fn))
 	cfg := config{
@@ -76,7 +82,7 @@ func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...c
 	pal := Payload{
 		Constructor: "apache_beam.dataframe.transforms.DataframeTransform",
 		Kwargs:      cfg.dpl,
-		Args:        []string{},
+		Args:        ArgStruct{},
 	}
 	// pet := beam.NewPythonExternalTransform("apache_beam.dataframe.transforms.DataframeTransform")
 	// pet.WithKwargs(map[string]any{
@@ -85,7 +91,7 @@ func DataframeTransform(s beam.Scope, fn string, col beam.PCollection, opts ...c
 	// })
 	pl := beam.CrossLanguagePayload(pal)
 	// namedInputs := map[string]beam.PCollection{"pcol1": col}
-	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(col.Type()))
+	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(typex.New(outT)))
 	return result[beam.UnnamedOutputTag()]
 
 }
