@@ -44,8 +44,8 @@ func TestRunInference(t *testing.T) {
 	checkFlags(t)
 
 	// ctx := context.Background()
-	row0 := TestRow{Example: []int64{0, 0}, Inference: 0}
-	row1 := TestRow{Example: []int64{1, 1}, Inference: 1}
+	// row0 := TestRow{Example: []int64{0, 0}, Inference: 0}
+	// row1 := TestRow{Example: []int64{1, 1}, Inference: 1}
 
 	p, s := beam.NewPipelineWithRoot()
 
@@ -63,14 +63,14 @@ func TestRunInference(t *testing.T) {
 
 	// inputRow := [][]int64{{0, 0}, {1, 1}}
 	// input := beam.CreateList(s, inputRow)
-	input := beam.Create(s, []int64{0, 0}, []int64{1, 1})
+	input := beam.Create(s, []int64{0, 0})
 	fmt.Println("coder***: ", input.Coder().String())
 	kwargs := inference.KwargsStruct{
 		ModelURI: "/tmp/staged/sklearn_model",
 	}
-	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, reflect.TypeOf((*TestRow)(nil)).Elem(), inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
+	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, input.Type().Type(), inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
 
-	passert.Equals(s, outCol, row0, row1)
+	passert.Equals(s, outCol, input)
 
 	ptest.RunAndValidate(t, p)
 }
