@@ -184,6 +184,7 @@ func TryCrossLanguage(
 	// Set the coder for outbound links for downstream validation.
 	for n, i := range outputsMap {
 		c := NewCoder(namedOutputTypes[n])
+		// log.Debugf(context.Background(), "coder: %v, key: %v, id: %v", c, n, i)
 		outboundLinks[i].To.Coder = c.coder
 	}
 
@@ -227,6 +228,7 @@ func nodeToPCollection(n *graph.Node) PCollection {
 		panic("tried converting invalid Node")
 	}
 	c := PCollection{n}
+	// log.Debugf(context.Background(), "coder for node: %v, coder: %v", n, NewCoder(c.Type()))
 	c.SetCoder(NewCoder(c.Type()))
 	return c
 }

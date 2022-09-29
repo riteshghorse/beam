@@ -143,7 +143,10 @@ func QueryExpansionService(ctx context.Context, p *HandlerParams) (*jobpb.Expans
 	client := jobpb.NewExpansionServiceClient(conn)
 
 	// Handling ExpansionResponse
+
+	// log.Debugf(ctx, "Expansion Request:\n %v\n", req)
 	res, err := client.Expand(ctx, req)
+	// log.Debugf(ctx, "Expansion Response\n %v\n", res)
 	if err != nil {
 		err = errors.Wrapf(err, "expansion failed")
 		return nil, errors.WithContextf(err, "expanding transform with ExpansionRequest: %v", req)

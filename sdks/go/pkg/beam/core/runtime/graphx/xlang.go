@@ -51,6 +51,10 @@ func mergeExpandedWithPipeline(edges []*graph.MultiEdge, p *pipepb.Pipeline) {
 			p.Components.WindowingStrategies[k] = v
 		}
 		for k, v := range components.GetCoders() {
+			// log.Debug(context.Background(), "\ndecoding coder")
+			// if value, ok := p.Components.Coders[k]; ok {
+			// 	log.Debugf(context.Background(), "\ncoder<%v>: %v", k, value)
+			// }
 			p.Components.Coders[k] = v
 		}
 		for k, v := range components.GetEnvironments() {
