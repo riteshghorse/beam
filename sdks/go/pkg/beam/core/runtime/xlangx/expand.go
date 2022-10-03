@@ -65,6 +65,7 @@ func Expand(edge *graph.MultiEdge, ext *graph.ExternalTransform) error {
 		extTransform = transforms[extTransformID]
 	}
 
+	graphx.AddFakeImpulses(p)
 	// Scoping the ExternalTransform with respect to it's unique namespace, thus
 	// avoiding future collisions
 	addNamespace(extTransform, p.GetComponents(), ext.Namespace)
@@ -76,6 +77,7 @@ func Expand(edge *graph.MultiEdge, ext *graph.ExternalTransform) error {
 		return err
 	}
 
+	graphx.RemoveFakeImpulses(p.GetComponents(), extTransform)
 	exp := &graph.ExpandedTransform{
 		Components:   res.GetComponents(),
 		Transform:    res.GetTransform(),
@@ -150,16 +152,28 @@ func startAutomatedJavaExpansionService(gradleTarget string, classpath string) (
 		return nil, "", err
 	}
 
-	if len(classpath) > 0 {
-		jarPath, err = expansionx.MakeJar(jarPath, classpath)
-		if err != nil {
-			return nil, "", err
-		}
+	serviceRunner, err := expansionx.NewExpansionServiceRunner(jarPath, "")
+	if err != nil {
+		return nil, "", fmt.Errorf("error in  startAutomatedJavaExpansionService(%s,%s): %w", gradleTarget, classpath, err)
+	}
+	err = serviceRunner.StartService()
+	if err != nil {
+		return nil, "", fmt.Errorf("error in starting expansion service, StartService(): %w", err)
+	}
+	stopFunc = serviceRunner.StopService
+	address = serviceRunner.Endpoint()
+	return stopFunc, address, nil
+}
+
+func startPythonExpansionService(service string) (stopFunc func() error, address string, err error) {
+	jarPath, err := expansionx.GetBeamJar(service, core.SdkVersion)
+	if err != nil {
+		return nil, "", err
 	}
 
 	serviceRunner, err := expansionx.NewExpansionServiceRunner(jarPath, "")
 	if err != nil {
-		return nil, "", fmt.Errorf("error in  startAutomatedJavaExpansionService(%s,%s): %w", gradleTarget, classpath, err)
+		return nil, "", fmt.Errorf("error in  startPythonExpansionService(%s): %w", service, err)
 	}
 	err = serviceRunner.StartService()
 	if err != nil {
@@ -184,6 +198,47 @@ func QueryAutomatedExpansionService(ctx context.Context, p *HandlerParams) (*job
 	target, classpath := parseClasspath(target)
 
 	stopFunc, address, err := startAutomatedJavaExpansionService(target, classpath)
+	if err != nil {
+		return nil, err
+	}
+	defer stopFunc()
+
+	p.Config = address
+
+	res, err := QueryExpansionService(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	exp := &graph.ExpandedTransform{
+		Components:   res.GetComponents(),
+		Transform:    res.GetTransform(),
+		Requirements: res.GetRequirements(),
+	}
+
+	p.ext.Expanded = exp
+	// Put correct expansion address into edge
+	p.edge.External.ExpansionAddr = address
+
+	_, err = ResolveArtifactsWithConfig(ctx, []*graph.MultiEdge{p.edge}, ResolveConfig{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Restore tag so we know the artifacts have been materialized eagerly down the road.
+	p.edge.External.ExpansionAddr = tag + Separator + target
+
+	// Can return the original response because all of our proto modification afterwards has
+	// been via pointer.
+	return res, nil
+}
+
+func QueryPythonExpansionService(ctx context.Context, p *HandlerParams) (*jobpb.ExpansionResponse, error) {
+	// Strip auto: tag to get Gradle target
+	tag, service := parseAddr(p.Config)
+
+	stopFunc, address, err := startPythonExpansionService(service)
 	if err != nil {
 		return nil, err
 	}

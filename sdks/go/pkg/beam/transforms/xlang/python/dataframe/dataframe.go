@@ -37,9 +37,7 @@ type kwargs struct {
 	IncludeIndexes bool                       `beam:"include_indexes"`
 }
 
-type argStruct struct {
-	args []string
-}
+type argStruct struct{}
 
 type config struct {
 	dpl           kwargs
@@ -82,6 +80,7 @@ func Transform(s beam.Scope, fn string, col beam.PCollection, outT reflect.Type,
 
 	pet := xlang.NewPythonExternalTransform[argStruct, kwargs]("apache_beam.dataframe.transforms.DataframeTransform")
 	pet.WithKwargs(cfg.dpl)
+	pet.WithArgs(cfg)
 	pl := beam.CrossLanguagePayload(pet)
 	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(typex.New(outT)))
 	return result[beam.UnnamedOutputTag()]
