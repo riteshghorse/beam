@@ -68,6 +68,7 @@ def main():
                 return parse_version('0.0')
 
         beam_version = max(info['releases'], key=maybe_strict_version)
+        beam_version = '2.42.0.rc1' # remove after testing
         beam_package = 'apache_beam[gcp,aws,asure,dataframe]==' + beam_version
     elif (os.path.exists(options.beam_version)
           or options.beam_version.startswith('http://')
@@ -77,6 +78,7 @@ def main():
         beam_package = options.beam_version + '[gcp,aws,asure,dataframe]'
     else:
         beam_version = options.beam_version
+        beam_version = '2.42.0.rc1' # remove after testing
         beam_package = 'apache_beam[gcp,aws,asure,dataframe]==' + beam_version
 
     deps = options.extra_packages.split(';') if options.extra_packages else []
