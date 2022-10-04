@@ -58,6 +58,17 @@ func NewExpansionServiceRunner(jarPath, servicePort string) (*ExpansionServiceRu
 	return &ExpansionServiceRunner{jarPath: jarPath, servicePort: servicePort, serviceCommand: serviceCommand}, nil
 }
 
+func NewPyExpansionServiceRunner(jarPath, service, servicePort string) (*ExpansionServiceRunner, error) {
+	if servicePort == "" {
+		port, err := findOpenPort()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find open port for service, got %v", err)
+		}
+		servicePort = fmt.Sprintf("%d", port)
+	}
+	serviceCommand := exec.Command(jarPath, "-m", service, "-p", servicePort, "--fully_qualified_name_glob=*", "--pickle_library=cloudpickle")
+	return &ExpansionServiceRunner{jarPath: jarPath, servicePort: servicePort, serviceCommand: serviceCommand}, nil
+}
 func (e *ExpansionServiceRunner) String() string {
 	return fmt.Sprintf("JAR: %v, Port: %v, Process: %v", e.jarPath, e.servicePort, e.serviceCommand.Process)
 }

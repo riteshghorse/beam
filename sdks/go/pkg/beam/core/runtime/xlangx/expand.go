@@ -18,8 +18,13 @@
 package xlangx
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
@@ -27,6 +32,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/pipelinex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/xlangx/expansionx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	jobpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/jobmanagement_v1"
 	pipepb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/pipeline_v1"
 	"google.golang.org/grpc"
@@ -152,6 +158,13 @@ func startAutomatedJavaExpansionService(gradleTarget string, classpath string) (
 		return nil, "", err
 	}
 
+	if len(classpath) > 0 {
+		jarPath, err = expansionx.MakeJar(jarPath, classpath)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
 	serviceRunner, err := expansionx.NewExpansionServiceRunner(jarPath, "")
 	if err != nil {
 		return nil, "", fmt.Errorf("error in  startAutomatedJavaExpansionService(%s,%s): %w", gradleTarget, classpath, err)
@@ -165,20 +178,81 @@ func startAutomatedJavaExpansionService(gradleTarget string, classpath string) (
 	return stopFunc, address, nil
 }
 
-func startPythonExpansionService(service string) (stopFunc func() error, address string, err error) {
-	jarPath, err := expansionx.GetBeamJar(service, core.SdkVersion)
+func getPythonVersion() (string, error) {
+	for _, v := range []string{"python", "python3"} {
+		cmd := exec.Command(v, "--version")
+		if err := cmd.Run(); err == nil {
+			return v, nil
+		}
+	}
+	return "", fmt.Errorf("no python installation found")
+}
+
+func startPythonExpansionService(service, extraPackage string) (stopFunc func() error, address string, err error) {
+	py, err := getPythonVersion()
 	if err != nil {
 		return nil, "", err
 	}
+	extraPackages := []string{}
+	if len(extraPackage) > 0 {
+		extraPackages = strings.Split(extraPackage, " ")
+		if err != nil {
+			return nil, "", err
+		}
+	}
 
-	serviceRunner, err := expansionx.NewExpansionServiceRunner(jarPath, "")
+	// create python virtual environment
+	cmds := []string{}
+	p, _ := os.Getwd()
+
+	log.Debugf(context.Background(), "current: %s", filepath.Join(p, "resources", "bootstrap_beam_venv.py"))
+	cmds = append(cmds, filepath.Join(p, "resources", "bootstrap_beam_venv.py"))
+	cmds = append(cmds, fmt.Sprintf("--beam_version=%s", core.SdkVersion))
+	if len(extraPackages) > 0 {
+		log.Debug(context.Background(), "Extra packages")
+		cmds = append(cmds, "--extra_packages=%s", strings.Join(extraPackages, ";"))
+	}
+	executable := exec.Command(py, cmds...)
+
+	stdout, err := executable.StdoutPipe()
 	if err != nil {
-		return nil, "", fmt.Errorf("error in  startPythonExpansionService(%s): %w", service, err)
+		return nil, "", errors.Wrap(err, "can't pipe stdout")
+	}
+	err = executable.Start()
+	if err != nil {
+		return nil, "", errors.Wrap(err, "can't pipe stdout")
+	}
+	rd := bufio.NewReader(stdout)
+
+	var venv string
+	for {
+		str, err := rd.ReadString('\n')
+		if str == "" {
+			break
+		}
+		if err != nil {
+			return nil, "", errors.Wrap(err, "can't read stdout")
+		}
+		venv = str
+	}
+	result := executable.Wait()
+	if result != nil {
+		return nil, "", errors.Wrap(result, "executable didn't exit properly")
+	}
+
+	if _, err := os.Stat(filepath.Dir(venv)); os.IsNotExist(err) {
+		return nil, "", errors.Wrap(err, "executable doesn't exist")
+	}
+	venv = filepath.Join(filepath.Dir(venv), py)
+	serviceRunner, err := expansionx.NewPyExpansionServiceRunner(venv, service, "")
+	if err != nil {
+		return nil, "", fmt.Errorf("error in  startAutomatedJavaExpansionService(%s,%s): %w", venv, service, err)
 	}
 	err = serviceRunner.StartService()
 	if err != nil {
 		return nil, "", fmt.Errorf("error in starting expansion service, StartService(): %w", err)
 	}
+
 	stopFunc = serviceRunner.StopService
 	address = serviceRunner.Endpoint()
 	return stopFunc, address, nil
@@ -237,8 +311,10 @@ func QueryAutomatedExpansionService(ctx context.Context, p *HandlerParams) (*job
 func QueryPythonExpansionService(ctx context.Context, p *HandlerParams) (*jobpb.ExpansionResponse, error) {
 	// Strip auto: tag to get Gradle target
 	tag, service := parseAddr(p.Config)
+	// parse extra-packages from namespace if present
+	service, extraPackages := parseClasspath(service)
 
-	stopFunc, address, err := startPythonExpansionService(service)
+	stopFunc, address, err := startPythonExpansionService(service, extraPackages)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +344,7 @@ func QueryPythonExpansionService(ctx context.Context, p *HandlerParams) (*jobpb.
 	}
 
 	// Restore tag so we know the artifacts have been materialized eagerly down the road.
-	p.edge.External.ExpansionAddr = tag + Separator + target
+	p.edge.External.ExpansionAddr = tag + Separator + service
 
 	// Can return the original response because all of our proto modification afterwards has
 	// been via pointer.
