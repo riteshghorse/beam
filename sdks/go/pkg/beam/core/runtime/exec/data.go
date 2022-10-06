@@ -42,6 +42,7 @@ func (id StreamID) String() string {
 type DataContext struct {
 	Data  DataManager
 	State StateReader
+	Timer TimerManager
 }
 
 // SideCache manages cached ReStream values for side inputs that can be re-used across
@@ -61,6 +62,14 @@ type DataManager interface {
 	OpenRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
 	// OpenWrite opens a closable byte stream for writing.
 	OpenWrite(ctx context.Context, id StreamID) (io.WriteCloser, error)
+}
+
+type TimerManager interface {
+	DataManager
+	// OpenTimerWrite
+	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
+	// OpenTimerRead opens a closable byte stream for reading.
+	OpenTimerRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
 }
 
 // StateReader is the interface for reading side input data.

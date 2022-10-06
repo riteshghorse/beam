@@ -520,6 +520,8 @@ func tryEncodeSpecial(t reflect.Type) (v1pb.Type_Special, bool) {
 		return v1pb.Type_BUNDLEFINALIZATION, true
 	case state.ProviderType:
 		return v1pb.Type_STATEPROVIDER, true
+	case typex.TimersType:
+		return v1pb.Type_TIMERPROVIDER, true
 	case typex.KVType:
 		return v1pb.Type_KV, true
 	case typex.CoGBKType:
@@ -686,6 +688,8 @@ func decodeSpecial(s v1pb.Type_Special) (reflect.Type, error) {
 		return typex.BundleFinalizationType, nil
 	case v1pb.Type_STATEPROVIDER:
 		return state.ProviderType, nil
+	case v1pb.Type_TIMERPROVIDER:
+		return typex.TimersType, nil
 	case v1pb.Type_KV:
 		return typex.KVType, nil
 	case v1pb.Type_COGBK:

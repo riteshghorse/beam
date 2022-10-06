@@ -42,6 +42,7 @@ type DataSource struct {
 
 	source DataManager
 	state  StateReader
+	timer  TimerManager
 
 	index    int64
 	splitIdx int64
@@ -94,6 +95,7 @@ func (n *DataSource) Up(ctx context.Context) error {
 func (n *DataSource) StartBundle(ctx context.Context, id string, data DataContext) error {
 	n.mu.Lock()
 	n.source = data.Data
+	n.timer = data.Timer
 	n.state = data.State
 	n.start = time.Now()
 	n.index = -1

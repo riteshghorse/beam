@@ -25,17 +25,24 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/options/gcpopts"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/register"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/util/pubsubx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/debug"
 )
+
+func init() {
+	register.DoFn4x1[beam.EventTime, timers.Provider, string, int, string](&keyFn{})
+}
 
 var (
 	input = flag.String("input", os.ExpandEnv("$USER-wordcap"), "Pubsub input topic.")
@@ -48,6 +55,15 @@ var (
 		"baz",
 	}
 )
+
+type keyFn struct {
+	BasicTimer timers.EventTimeTimer
+}
+
+func (k *keyFn) ProcessElement(ts beam.EventTime, t timers.Provider, w string, c int) string {
+	k.BasicTimer.Set(t, ts.Add(time.Second*2))
+	return fmt.Sprintf("%s-%d", w, c)
+}
 
 func main() {
 	flag.Parse()
@@ -73,7 +89,11 @@ func main() {
 	str := beam.ParDo(s, func(b []byte) string {
 		return (string)(b)
 	}, col)
-	cap := beam.ParDo(s, strings.ToUpper, str)
+	cap := beam.ParDo(s, func(s string, emit func(string, int)) {
+		emit(s, 1)
+	}, str)
+
+	cap = beam.ParDo(s, &keyFn{BasicTimer: timers.MakeEventTimeTimer("BasicTimer")}, cap)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
