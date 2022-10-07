@@ -18,12 +18,12 @@
 package xlangx
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core"
@@ -202,51 +202,50 @@ func startPythonExpansionService(service, extraPackage string) (stopFunc func() 
 	}
 
 	// create python virtual environment
-	cmds := []string{}
-	p, _ := os.Getwd()
+	sort.Strings(extraPackages)
+	beamPackage := fmt.Sprintf("apache_beam[gcp,aws,asure,dataframe]==%s", "2.42.0rc1")
+	cacheDir := "~/.apache_beam/cache"
+	venvDir := filepath.Join(
+		cacheDir, "venvs",
+		fmt.Sprintf("py-%s-beam-%s-%s", py, core.SdkVersion, strings.Join(extraPackages, ";")),
+	)
+	venvPython := filepath.Join(venvDir, "bin", "python")
 
-	log.Debugf(context.Background(), "current: %s", filepath.Join(p, "resources", "bootstrap_beam_venv.py"))
-	cmds = append(cmds, filepath.Join(p, "resources", "bootstrap_beam_venv.py"))
-	cmds = append(cmds, fmt.Sprintf("--beam_version=%s", core.SdkVersion))
-	if len(extraPackages) > 0 {
-		log.Debug(context.Background(), "Extra packages")
-		cmds = append(cmds, "--extra_packages=%s", strings.Join(extraPackages, ";"))
-	}
-	executable := exec.Command(py, cmds...)
-
-	stdout, err := executable.StdoutPipe()
-	if err != nil {
-		return nil, "", errors.Wrap(err, "can't pipe stdout")
-	}
-	err = executable.Start()
-	if err != nil {
-		return nil, "", errors.Wrap(err, "can't pipe stdout")
-	}
-	rd := bufio.NewReader(stdout)
-
-	var venv string
-	for {
-		str, err := rd.ReadString('\n')
-		if str == "" {
-			break
-		}
+	if _, err := os.Stat(venvPython); err != nil {
+		err := exec.Command(py, "-m", "venv", venvDir).Run()
 		if err != nil {
-			return nil, "", errors.Wrap(err, "can't read stdout")
+			return nil, "", errors.Wrap(err, "upgrading pip")
 		}
-		venv = str
+		err = exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "pip").Run()
+		if err != nil {
+			return nil, "", errors.Wrap(err, "upgrading pip")
+		}
+		err = exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "setuptools").Run()
+		if err != nil {
+			return nil, "", errors.Wrap(err, "upgrading setuptools")
+		}
+		err = exec.Command(venvPython, "-m", "pip", "install", beamPackage, "pyparsing==2.4.2").Run()
+		if err != nil {
+			return nil, "", errors.Wrap(err, "upgrading beam package")
+		}
+		if len(extraPackages) > 0 {
+			cmd := []string{"-m", "pip", "install"}
+			cmd = append(cmd, extraPackages...)
+			err = exec.Command(venvPython, cmd...).Run()
+			if err != nil {
+				return nil, "", errors.Wrap(err, "upgrading dependencies")
+			}
+		}
+		err = exec.Command(venvPython, "-c", "import apache_beam").Run()
+		if err != nil {
+			return nil, "", err
+		}
 	}
-	result := executable.Wait()
-	if result != nil {
-		return nil, "", errors.Wrap(result, "executable didn't exit properly")
-	}
+	log.Debugf(context.Background(), "path: %v", venvPython)
 
-	if _, err := os.Stat(filepath.Dir(venv)); os.IsNotExist(err) {
-		return nil, "", errors.Wrap(err, "executable doesn't exist")
-	}
-	venv = filepath.Join(filepath.Dir(venv), py)
-	serviceRunner, err := expansionx.NewPyExpansionServiceRunner(venv, service, "")
+	serviceRunner, err := expansionx.NewPyExpansionServiceRunner(venvPython, service, "")
 	if err != nil {
-		return nil, "", fmt.Errorf("error in  startAutomatedJavaExpansionService(%s,%s): %w", venv, service, err)
+		return nil, "", fmt.Errorf("error in  startAutomatedPythonExpansionService(%s,%s): %w", venvPython, service, err)
 	}
 	err = serviceRunner.StartService()
 	if err != nil {

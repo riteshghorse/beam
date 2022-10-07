@@ -29,7 +29,7 @@ import (
 // start up a Beam Expansion Service JAR and maintain a handle on the
 // process running the service to enable shutdown as well.
 type ExpansionServiceRunner struct {
-	jarPath        string
+	execPath       string
 	servicePort    string
 	serviceCommand *exec.Cmd
 }
@@ -46,7 +46,7 @@ func findOpenPort() (int, error) {
 // NewExpansionServiceRunner builds an ExpansionServiceRunner struct for a given gradle target and
 // Beam version and returns a pointer to it. Passing an empty string as servicePort will request an
 // open port to be assigned to the service.
-func NewExpansionServiceRunner(jarPath, servicePort string) (*ExpansionServiceRunner, error) {
+func NewExpansionServiceRunner(execPath, servicePort string) (*ExpansionServiceRunner, error) {
 	if servicePort == "" {
 		port, err := findOpenPort()
 		if err != nil {
@@ -54,11 +54,11 @@ func NewExpansionServiceRunner(jarPath, servicePort string) (*ExpansionServiceRu
 		}
 		servicePort = fmt.Sprintf("%d", port)
 	}
-	serviceCommand := exec.Command("java", "-jar", jarPath, servicePort)
-	return &ExpansionServiceRunner{jarPath: jarPath, servicePort: servicePort, serviceCommand: serviceCommand}, nil
+	serviceCommand := exec.Command("java", "-jar", execPath, servicePort)
+	return &ExpansionServiceRunner{execPath: execPath, servicePort: servicePort, serviceCommand: serviceCommand}, nil
 }
 
-func NewPyExpansionServiceRunner(jarPath, service, servicePort string) (*ExpansionServiceRunner, error) {
+func NewPyExpansionServiceRunner(py, service, servicePort string) (*ExpansionServiceRunner, error) {
 	if servicePort == "" {
 		port, err := findOpenPort()
 		if err != nil {
@@ -66,11 +66,11 @@ func NewPyExpansionServiceRunner(jarPath, service, servicePort string) (*Expansi
 		}
 		servicePort = fmt.Sprintf("%d", port)
 	}
-	serviceCommand := exec.Command(jarPath, "-m", service, "-p", servicePort, "--fully_qualified_name_glob=*", "--pickle_library=cloudpickle")
-	return &ExpansionServiceRunner{jarPath: jarPath, servicePort: servicePort, serviceCommand: serviceCommand}, nil
+	serviceCommand := exec.Command(py, "-m", service, "-p", servicePort, "--fully_qualified_name_glob=*", "--pickle_library=cloudpickle")
+	return &ExpansionServiceRunner{execPath: py, servicePort: servicePort, serviceCommand: serviceCommand}, nil
 }
 func (e *ExpansionServiceRunner) String() string {
-	return fmt.Sprintf("JAR: %v, Port: %v, Process: %v", e.jarPath, e.servicePort, e.serviceCommand.Process)
+	return fmt.Sprintf("Exec Path: %v, Port: %v, Process: %v", e.execPath, e.servicePort, e.serviceCommand.Process)
 }
 
 // Endpoint returns the formatted endpoint the ExpansionServiceRunner is set to start the expansion
