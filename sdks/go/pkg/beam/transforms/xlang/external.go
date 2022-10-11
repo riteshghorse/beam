@@ -28,6 +28,8 @@ import (
 
 const (
 	pythonCallableUrn = "beam:logical_type:python_callable:v1"
+	// PythonExpansionService is the module that expands python external transforms.
+	PythonExpansionService = "apache_beam.runners.portability.expansion_service_main"
 )
 
 var (

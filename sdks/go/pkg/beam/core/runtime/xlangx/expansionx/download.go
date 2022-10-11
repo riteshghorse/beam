@@ -23,10 +23,14 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/user"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 )
 
 type url string
@@ -374,4 +378,68 @@ func dropEndOfGradleTarget(gradleTarget string) string {
 func jarExists(jarPath string) bool {
 	_, err := os.Stat(jarPath)
 	return err == nil
+}
+
+func getPythonVersion() (string, error) {
+	for _, v := range []string{"python", "python3"} {
+		cmd := exec.Command(v, "--version")
+		if err := cmd.Run(); err == nil {
+			return v, nil
+		}
+	}
+	return "", fmt.Errorf("no python installation found")
+}
+
+func SetUpPythonEnvironment(extraPackage string) (string, error) {
+	py, err := getPythonVersion()
+	if err != nil {
+		return "", fmt.Errorf("no python installation found: %v", err)
+	}
+	extraPackages := []string{}
+	if len(extraPackage) > 0 {
+		extraPackages = strings.Split(extraPackage, " ")
+	}
+
+	// create python virtual environment
+	sort.Strings(extraPackages)
+	// TODO: replace sdk version after testing
+	beamPackage := fmt.Sprintf("apache_beam[gcp,aws,asure,dataframe]==%s", "2.42.0rc1")
+	cacheDir := "~/.apache_beam/cache"
+	venvDir := filepath.Join(
+		cacheDir, "venvs",
+		fmt.Sprintf("py-%s-beam-%s-%s", py, "2.42.0rc1", strings.Join(extraPackages, ";")),
+	)
+	venvPython := filepath.Join(venvDir, "bin", "python")
+
+	if _, err := os.Stat(venvPython); err != nil {
+		err := exec.Command(py, "-m", "venv", venvDir).Run()
+		if err != nil {
+			return "", errors.Wrap(err, "error creating new virtual environment for python expansion service")
+		}
+		err = exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "pip").Run()
+		if err != nil {
+			return "", errors.Wrap(err, "error upgrading pip")
+		}
+		err = exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "setuptools").Run()
+		if err != nil {
+			return "", errors.Wrap(err, "error upgrading setuptools")
+		}
+		err = exec.Command(venvPython, "-m", "pip", "install", beamPackage, "pyparsing==2.4.2").Run()
+		if err != nil {
+			return "", errors.Wrap(err, fmt.Sprintf("error installing beam package: %v", beamPackage))
+		}
+		if len(extraPackages) > 0 {
+			cmd := []string{"-m", "pip", "install"}
+			cmd = append(cmd, extraPackages...)
+			err = exec.Command(venvPython, cmd...).Run()
+			if err != nil {
+				return "", errors.Wrap(err, "error installing dependencies")
+			}
+		}
+		err = exec.Command(venvPython, "-c", "import apache_beam").Run()
+		if err != nil {
+			return "", errors.Wrap(err, "apache beam installation failed in virtualenv")
+		}
+	}
+	return venvPython, nil
 }

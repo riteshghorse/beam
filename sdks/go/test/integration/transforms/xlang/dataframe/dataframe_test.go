@@ -38,7 +38,7 @@ func checkFlags(t *testing.T) {
 
 func TestDataframe(t *testing.T) {
 	integration.CheckFilters(t)
-	checkFlags(t)
+	// checkFlags(t)
 	p := DataframeTransform(expansionAddr)
 	ptest.RunAndValidate(t, p)
 }

@@ -217,3 +217,29 @@ func TestGetJar_dev(t *testing.T) {
 		t.Errorf("error message does not contain gradle command %v for user, got message: %v", gradleTarget, err)
 	}
 }
+
+func TestSetUpPythonEnvironment(t *testing.T) {
+	type args struct {
+		extraPackage string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := SetUpPythonEnvironment(tt.args.extraPackage)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SetUpPythonEnvironment() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("SetUpPythonEnvironment() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
