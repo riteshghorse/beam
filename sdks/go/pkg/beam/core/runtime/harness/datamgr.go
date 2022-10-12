@@ -256,7 +256,7 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cid := clientID{ptransformID: ptransformID, instID: instID}
+	cid := clientID{ptransformID: ptransformID, instID: instID, timerFamilyID: "userTimer"}
 	if c.readErr != nil {
 		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
 		return &errReader{c.readErr}
@@ -272,6 +272,7 @@ func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, i
 
 func (c *DataChannel) read(ctx context.Context) {
 	cache := make(map[clientID]*dataReader)
+	timerCache := make(map[clientID]*dataReader)
 	for {
 		msg, err := c.client.Recv()
 		if err != nil {
@@ -371,13 +372,13 @@ func (c *DataChannel) read(ctx context.Context) {
 			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
 			var r *dataReader
-			if local, ok := cache[id]; ok {
+			if local, ok := timerCache[id]; ok {
 				r = local
 			} else {
 				c.mu.Lock()
 				r = c.makeReader(ctx, id)
 				c.mu.Unlock()
-				cache[id] = r
+				timerCache[id] = r
 			}
 
 			if elm.GetIsLast() {
@@ -387,20 +388,20 @@ func (c *DataChannel) read(ctx context.Context) {
 					if len(elm.GetTimers()) != 0 {
 						// In case of local side closing, send with select.
 						select {
-						case r.buf <- elm.GetTimers():
+						case r.tbuf <- elm.GetTimers():
 						case <-r.done:
 						}
 					}
 					// Close buffer to signal EOF.
 					r.completed = true
-					close(r.buf)
+					close(r.tbuf)
 				}
 
 				// Clean up local bookkeeping. We'll never see another message
 				// for it again. We have to be careful not to remove the real
 				// one, because readers may be initialized after we've seen
 				// the full stream.
-				delete(cache, id)
+				delete(timerCache, id)
 				continue
 			}
 
@@ -417,10 +418,10 @@ func (c *DataChannel) read(ctx context.Context) {
 			// is slow (or gets stuck). If the local side closes, the reader
 			// will be marked as completed and further remote data will be ignored.
 			select {
-			case r.buf <- elm.GetTimers():
+			case r.tbuf <- elm.GetTimers():
 			case <-r.done:
 				r.completed = true
-				close(r.buf)
+				close(r.tbuf)
 			}
 		}
 	}
@@ -451,7 +452,7 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 		return r
 	}
 
-	r := &dataReader{id: id, buf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c}
+	r := &dataReader{id: id, buf: make(chan []byte, bufElements), tbuf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c}
 
 	// Just in case initial data for an instruction arrives *after* an instructon has ended.
 	// eg. it was blocked by another reader being slow, or the other instruction failed.
@@ -541,10 +542,13 @@ func (c *DataChannel) makeWriter(ctx context.Context, id clientID) *dataWriter {
 }
 
 type dataReader struct {
-	id        clientID
-	buf       chan []byte
-	done      chan bool
-	cur       []byte
+	isTimer bool
+	id      clientID
+	tbuf    chan []byte
+	buf     chan []byte
+	done    chan bool
+	cur     []byte
+
 	channel   *DataChannel
 	completed bool
 	err       error
@@ -557,6 +561,31 @@ func (r *dataReader) Close() error {
 }
 
 func (r *dataReader) Read(buf []byte) (int, error) {
+	if r.id.timerFamilyID != "" {
+		if r.cur == nil {
+			b, ok := <-r.tbuf
+			if !ok {
+				if r.err == nil {
+					return 0, io.EOF
+				}
+				return 0, r.err
+			}
+			r.cur = b
+		}
+
+		// We don't need to check for a 0 length copy from r.cur here, since that's
+		// checked before buffers are handed to the r.buf channel.
+		n := copy(buf, r.cur)
+
+		switch {
+		case len(r.cur) == n:
+			r.cur = nil
+		default:
+			r.cur = r.cur[n:]
+		}
+
+		return n, nil
+	}
 	if r.cur == nil {
 		b, ok := <-r.buf
 		if !ok {

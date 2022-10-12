@@ -155,6 +155,8 @@ func (n *DataSource) Process(ctx context.Context) error {
 		cp = MakeElementDecoder(c)
 	}
 
+	// tr, err := n.timer.OpenTimerRead(ctx, )
+
 	for {
 		if n.incrementIndexAndCheckSplit() {
 			return nil

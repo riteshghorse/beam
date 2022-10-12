@@ -147,6 +147,7 @@ func Main(ctx context.Context, loggingEndpoint, controlEndpoint string) error {
 		inactive:             newCircleBuffer(),
 		metStore:             make(map[instructionID]*metrics.Store),
 		failed:               make(map[instructionID]error),
+		timer:                &DataChannelManager{},
 		data:                 &DataChannelManager{},
 		state:                &StateChannelManager{},
 		cache:                &sideCache,
@@ -297,6 +298,7 @@ type control struct {
 	failed map[instructionID]error // protected by mu
 	mu     sync.Mutex
 
+	timer *DataChannelManager
 	data  *DataChannelManager
 	state *StateChannelManager
 	// TODO(BEAM-11097): Cache is currently unused.
@@ -393,16 +395,17 @@ func (c *control) handleInstruction(ctx context.Context, req *fnpb.InstructionRe
 
 		data := NewScopedDataManager(c.data, instID)
 		state := NewScopedStateReaderWithCache(c.state, instID, c.cache)
-
+		timer := NewScopedDataManager(&DataChannelManager{}, instID)
 		sampler := newSampler(store)
 		go sampler.start(ctx, samplePeriod)
 
-		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state, Timer: NewScopedDataManager(&DataChannelManager{}, instID)})
+		err = plan.Execute(ctx, string(instID), exec.DataContext{Data: data, State: state, Timer: timer})
 
 		sampler.stop()
 
 		data.Close()
 		state.Close()
+		timer.Close()
 
 		c.cache.CompleteBundle(tokens...)
 

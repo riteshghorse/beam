@@ -29,6 +29,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/util/errorx"
 )
 
@@ -127,6 +128,21 @@ func (n *ParDo) StartBundle(ctx context.Context, id string, data DataContext) er
 
 	// TODO(BEAM-3303): what to set for StartBundle/FinishBundle window and emitter timestamp?
 
+	if n.Timer != nil {
+		if ta, ok := n.Timer.(*userTimerAdapter); ok {
+			r, err := n.timerManager.OpenTimerRead(ctx, ta.SID)
+			if err != nil {
+				n.fail(err)
+			}
+			// var b []byte
+			// cnt, err := r.Read(b)
+			// if err != nil {
+			// 	n.fail(err)
+			// }
+			log.Infof(ctx, "timers stream opened")
+			defer r.Close()
+		}
+	}
 	if _, err := n.invokeDataFn(n.ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, n.Fn.StartBundleFn(), nil); err != nil {
 		return n.fail(err)
 	}
