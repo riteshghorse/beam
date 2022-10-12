@@ -234,6 +234,7 @@ if __name__ == '__main__':
         # every Beam release, see: https://github.com/apache/beam/issues/23119
         'cloudpickle~=2.2.0',
         'fastavro>=0.23.6,<2',
+        'fasteners>=0.3,<1.0',
         'grpcio>=1.33.1,!=1.48.0,<2',
         'hdfs>=2.1.0,<3.0.0',
         'httplib2>=0.8,<0.21.0',
@@ -265,6 +266,7 @@ if __name__ == '__main__':
           ],
           'test': [
             'freezegun>=0.3.12',
+            'hypothesis<7',
             'joblib>=1.0.1',
             'mock>=1.0.1,<3.0.0',
             'pandas<2.0.0',
@@ -283,7 +285,7 @@ if __name__ == '__main__':
             'cryptography>=36.0.0',
           ],
           'gcp': [
-            'cachetools>=3.1.0,<5',
+            'cachetools>=3.1.0,<6',
             'google-apitools>=0.5.31,<0.5.32',
             # NOTE: Maintainers, please do not require google-auth>=2.x.x
             # Until this issue is closed
