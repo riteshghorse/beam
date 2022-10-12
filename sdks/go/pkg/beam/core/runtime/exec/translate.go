@@ -17,7 +17,9 @@ package exec
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -591,7 +593,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 					if err != nil {
 						return nil, err
 					}
-					if !coder.IsKV(ec) {
+					if !coder.IsKV(ec) && !coder.IsCoGBK(ec) {
 						return nil, errors.Errorf("unexpected non-KV coder PCollection input to combine: %v", ec)
 					}
 					u = &LiftedCombine{Combine: cn, KeyCoder: ec.Components[0], WindowCoder: wc}
@@ -624,6 +626,22 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 			c, _, err := b.makeCoderForPCollection(from)
 			if err != nil {
 				return nil, err
+			}
+			if coder.IsCoGBK(c) {
+				// Hackity Hack.
+				log.Print("QQQ: ", c, c.T, c.Components[0].T, c.Components[1].T)
+				st := typex.New(reflect.SliceOf(c.Components[1].T.Type()), c.Components[1].T)
+
+				c = &coder.Coder{
+					Kind: coder.KV,
+					T:    typex.NewKV(c.Components[0].T, st),
+					Components: []*coder.Coder{
+						c.Components[0],
+						&coder.Coder{
+							Kind: coder.Iterable, T: st, Components: []*coder.Coder{c.Components[1]},
+						},
+					},
+				}
 			}
 			if !coder.IsKV(c) {
 				return nil, errors.Errorf("unexpected inject coder: %v", c)

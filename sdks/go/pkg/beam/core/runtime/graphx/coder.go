@@ -236,7 +236,8 @@ func (b *CoderUnmarshaller) makeCoder(id string, c *pipepb.Coder) (*coder.Coder,
 
 			if ids, ok := b.isCoGBKList(id); ok {
 				// CoGBK<K,V,W,..>
-
+				kind = coder.CoGBK
+				root = typex.CoGBKType
 				values, err := b.Coders(ids)
 				if err != nil {
 					return nil, err
@@ -552,6 +553,15 @@ func (b *CoderMarshaller) Add(c *coder.Coder) (string, error) {
 		comp = append(comp, id)
 
 		return b.internBuiltInCoder(urnTimerCoder, comp...), nil
+
+	case coder.Iterable:
+		comp := []string{}
+		ids, err := b.AddMulti(c.Components)
+		if err != nil {
+			return "", errors.SetTopLevelMsgf(err, "failed to marshal iterable coder %v", c)
+		}
+		comp = append(comp, ids...)
+		return b.internBuiltInCoder(urnIterableCoder, comp...), nil
 
 	default:
 		err := errors.Errorf("unexpected coder kind: %v", c.Kind)

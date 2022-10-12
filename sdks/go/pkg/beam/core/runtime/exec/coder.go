@@ -162,7 +162,16 @@ func MakeElementEncoder(c *coder.Coder) ElementEncoder {
 			inner: MakeElementEncoder(c.Components[0]),
 			be:    boolEncoder{},
 		}
-
+	case coder.CoGBK:
+		if len(c.Components) > 2 {
+			panic(fmt.Sprintf("Unable to encode general CoGBKs: %v", c))
+		}
+		return &kvEncoder{
+			fst: MakeElementEncoder(c.Components[0]),
+			snd: &iterableEncoder{
+				enc: MakeElementEncoder(c.Components[1]),
+			},
+		}
 	default:
 		panic(fmt.Sprintf("Unexpected coder: %v", c))
 	}
@@ -280,7 +289,16 @@ func MakeElementDecoder(c *coder.Coder) ElementDecoder {
 			inner: MakeElementDecoder(c.Components[0]),
 			bd:    boolDecoder{},
 		}
-
+	case coder.CoGBK:
+		if len(c.Components) > 2 {
+			panic(fmt.Sprintf("Unable to encode general CoGBKs: %v", c))
+		}
+		return &kvDecoder{
+			fst: MakeElementDecoder(c.Components[0]),
+			snd: &iterableDecoder{
+				dec: MakeElementDecoder(c.Components[1]),
+			},
+		}
 	default:
 		panic(fmt.Sprintf("Unexpected coder: %v", c))
 	}
