@@ -403,7 +403,7 @@ func SetUpPythonEnvironment(extraPackage string) (string, error) {
 	// create python virtual environment
 	sort.Strings(extraPackages)
 	// TODO: replace sdk version after testing
-	beamPackage := fmt.Sprintf("apache_beam[gcp,aws,asure,dataframe]==%s", "2.42.0rc1")
+	beamPackage := fmt.Sprintf("apache_beam[gcp,aws,azure,dataframe]==%s", "2.42.0rc1")
 	cacheDir := "~/.apache_beam/cache"
 	venvDir := filepath.Join(
 		cacheDir, "venvs",
