@@ -234,6 +234,7 @@ if __name__ == '__main__':
         # every Beam release, see: https://github.com/apache/beam/issues/23119
         'cloudpickle~=2.2.0',
         'fastavro>=0.23.6,<2',
+        'fasteners>=0.3,<1.0',
         'grpcio>=1.33.1,!=1.48.0,<2',
         'hdfs>=2.1.0,<3.0.0',
         'httplib2>=0.8,<0.21.0',
@@ -258,13 +259,14 @@ if __name__ == '__main__':
       # BEAM-8840: Do NOT use tests_require or setup_requires.
       extras_require={
           'docs': [
-              'Sphinx>=1.5.2,<2.0',
+              'Sphinx>=1.5.2,<6.0',
               # Pinning docutils as a workaround for Sphinx issue:
               # https://github.com/sphinx-doc/sphinx/issues/9727
               'docutils==0.17.1'
           ],
           'test': [
             'freezegun>=0.3.12',
+            'hypothesis<7',
             'joblib>=1.0.1',
             'mock>=1.0.1,<3.0.0',
             'pandas<2.0.0',
