@@ -28,8 +28,10 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/pipelinex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/xlangx/expansionx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	jobpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/jobmanagement_v1"
 	pipepb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/pipeline_v1"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 )
 
@@ -49,6 +51,7 @@ func Expand(edge *graph.MultiEdge, ext *graph.ExternalTransform) error {
 		return errors.Wrapf(err, "unable to generate proto representation of %v", ext)
 	}
 
+	log.Debugf(context.Background(), "pipeline is this: %v", p.GetComponents())
 	transforms := p.GetComponents().GetTransforms()
 
 	// Transforms consist of only External transform and composites. Composites
@@ -109,12 +112,28 @@ func expand(
 	if config != ext.ExpansionAddr {
 		ext.ExpansionAddr = config
 	}
+
+	var coderIDInUse []string
+	for _, pcol := range comps.GetPcollections() {
+		coderIDInUse = append(coderIDInUse, pcol.CoderId)
+	}
+	for _, ws := range comps.GetWindowingStrategies() {
+		coderIDInUse = append(coderIDInUse, ws.WindowCoderId)
+	}
+	outputCoderID := make(map[string]string)
+
+	for cid := range comps.GetCoders() {
+		if !slices.Contains(coderIDInUse, cid) {
+			outputCoderID["random"] = cid
+		}
+	}
 	return h(ctx, &HandlerParams{
 		Config: config,
 		Req: &jobpb.ExpansionRequest{
-			Components: comps,
-			Transform:  transform,
-			Namespace:  ext.Namespace,
+			Components:          comps,
+			Transform:           transform,
+			Namespace:           ext.Namespace,
+			OutputCoderRequests: outputCoderID,
 		},
 		edge: edge,
 		ext:  ext,

@@ -31,32 +31,32 @@ func init() {
 }
 
 type TestRow struct {
-	Example   []int64
-	Inference int32 `beam:"b"`
+	Example   []int64 `beam:"example"`
+	Inference int32   `beam:"inference"`
 }
 
 func RunInference(expansionAddr string) *beam.Pipeline {
 	p, s := beam.NewPipelineWithRoot()
 
 	beam.Impulse(s)
-	// inputRow := []TestRow{
-	// 	{
-	// 		Example:   []int64{0, 0},
-	// 		Inference: 0,
-	// 	},
-	// 	{
-	// 		Example:   []int64{1, 1},
-	// 		Inference: 0,
-	// 	},
-	// }
 
 	inputRow := [][]int64{{0, 0}, {1, 1}}
 	input := beam.CreateList(s, inputRow)
 	kwargs := inference.KwargStruct{
 		ModelURI: "/tmp/staged/sklearn_model",
 	}
-	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, input.Type().Type(), inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
-
-	passert.Equals(s, outCol, input)
+	output := []TestRow{
+		{
+			Example:   []int64{0, 0},
+			Inference: 0,
+		},
+		{
+			Example:   []int64{1, 1},
+			Inference: 1,
+		},
+	}
+	outT := reflect.TypeOf((*TestRow)(nil)).Elem()
+	outCol := inference.RunInference(s, "apache_beam.ml.inference.sklearn_inference.SklearnModelHandlerNumpy", input, outT, inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
+	passert.Equals(s, outCol, output[0], output[1])
 	return p
 }

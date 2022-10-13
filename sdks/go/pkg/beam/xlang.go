@@ -16,10 +16,13 @@
 package beam
 
 import (
+	"context"
+
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/graphx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/xlangx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 // UnnamedInput is a helper function for passing single unnamed inputs to
@@ -185,6 +188,11 @@ func TryCrossLanguage(
 	for n, i := range outputsMap {
 		c := NewCoder(namedOutputTypes[n])
 		outboundLinks[i].To.Coder = c.coder
+
+		// TODO(ritesh): can we build a coder registry of output coders from here?
+		// but as i remember, the coder-id is not generated at this point.
+		// confirmed that the coder-id is not populated here.
+		log.Debugf(context.Background(), "the coder registry: tag(%v):coder(%v)", n, c.coder)
 	}
 
 	ext := graph.ExternalTransform{

@@ -682,6 +682,14 @@ func (m *marshaller) expandCrossLanguage(namedEdge NamedEdge) (string, error) {
 		EnvironmentId: m.addDefaultEnv(),
 	}
 
+	// add the coders for output in the marshaller even if expanded is nil
+	// for output coder field in expansion request.
+	for _, out := range edge.Output {
+		_, err := m.coders.Add(out.To.Coder)
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to add output coder to coder registry: %v", m.coders)
+		}
+	}
 	if edge.External.Expanded != nil {
 		// Outputs need to temporarily match format of unnamed Go SDK Nodes.
 		// After the initial pipeline is constructed, these will be used to correctly
