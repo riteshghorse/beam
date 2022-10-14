@@ -689,10 +689,11 @@ func (m *marshaller) expandCrossLanguage(namedEdge NamedEdge) (string, error) {
 	// Python external transform needs the producer of input PCollection in expansion request.
 	if len(names) > 2 && names[2] == "python" {
 		for _, out := range edge.Output {
-			_, err := m.coders.Add(out.To.Coder)
+			id, err := m.coders.Add(out.To.Coder)
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to add output coder to coder registry: %v", m.coders)
 			}
+			out.To.Coder.ID = id
 		}
 	}
 
