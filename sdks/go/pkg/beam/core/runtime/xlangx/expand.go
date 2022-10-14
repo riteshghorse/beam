@@ -31,7 +31,6 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	jobpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/jobmanagement_v1"
 	pipepb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/pipeline_v1"
-	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 )
 
@@ -113,19 +112,28 @@ func expand(
 		ext.ExpansionAddr = config
 	}
 
-	var coderIDInUse []string
-	for _, pcol := range comps.GetPcollections() {
-		coderIDInUse = append(coderIDInUse, pcol.CoderId)
-	}
-	for _, ws := range comps.GetWindowingStrategies() {
-		coderIDInUse = append(coderIDInUse, ws.WindowCoderId)
-	}
-	outputCoderID := make(map[string]string)
+	// var coderIDInUse []string
+	// for _, pcol := range comps.GetPcollections() {
+	// 	coderIDInUse = append(coderIDInUse, pcol.CoderId)
+	// }
+	// for _, ws := range comps.GetWindowingStrategies() {
+	// 	coderIDInUse = append(coderIDInUse, ws.WindowCoderId)
+	// }
+	// outputCoderID := make(map[string]string)
 
-	for cid := range comps.GetCoders() {
-		if !slices.Contains(coderIDInUse, cid) {
-			outputCoderID["random"] = cid
+	// tag := 0
+	coders := make(map[string]string)
+	for cid, spec := range comps.GetCoders() {
+		coders[spec.Spec.GetUrn()] = cid
+	}
+
+	outputCoderID := make(map[string]string)
+	for tag, id := range edge.External.OutputsMap {
+		urn, err := graphx.CoderToUrn(edge.Output[id].To.Coder)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to find output coder for expansion request")
 		}
+		outputCoderID[tag] = coders[urn]
 	}
 	return h(ctx, &HandlerParams{
 		Config: config,
