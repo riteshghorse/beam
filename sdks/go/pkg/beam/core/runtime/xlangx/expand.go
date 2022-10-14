@@ -112,16 +112,6 @@ func expand(
 		ext.ExpansionAddr = config
 	}
 
-	// var coderIDInUse []string
-	// for _, pcol := range comps.GetPcollections() {
-	// 	coderIDInUse = append(coderIDInUse, pcol.CoderId)
-	// }
-	// for _, ws := range comps.GetWindowingStrategies() {
-	// 	coderIDInUse = append(coderIDInUse, ws.WindowCoderId)
-	// }
-	// outputCoderID := make(map[string]string)
-
-	// tag := 0
 	coders := make(map[string]string)
 	for cid, spec := range comps.GetCoders() {
 		coders[spec.Spec.GetUrn()] = cid
