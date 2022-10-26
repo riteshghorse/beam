@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
@@ -41,7 +43,7 @@ import (
 )
 
 func init() {
-	register.DoFn4x1[beam.EventTime, timers.Provider, string, int, string](&keyFn{})
+	register.DoFn3x1[timers.Provider, string, int, string](&keyFn{})
 }
 
 var (
@@ -57,11 +59,11 @@ var (
 )
 
 type keyFn struct {
-	BasicTimer timers.EventTimeTimer
+	BasicTimer timers.ProcessingTimeTimer
 }
 
-func (k *keyFn) ProcessElement(ts beam.EventTime, t timers.Provider, w string, c int) string {
-	k.BasicTimer.Set(t, ts.Add(time.Second*2))
+func (k *keyFn) ProcessElement(t timers.Provider, w string, c int) string {
+	k.BasicTimer.Set(t, mtime.FromTime(time.Now().Add(time.Second*2)))
 	return fmt.Sprintf("%s-%d", w, c)
 }
 
@@ -93,7 +95,9 @@ func main() {
 		emit(s, 1)
 	}, str)
 
-	cap = beam.ParDo(s, &keyFn{BasicTimer: timers.MakeEventTimeTimer("BasicTimer")}, cap)
+	cap = beam.WindowInto(s, window.NewFixedWindows(time.Second*2), cap)
+
+	cap = beam.ParDo(s, &keyFn{BasicTimer: timers.MakeProcessingTimeTimer("BasicTimer")}, cap)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
