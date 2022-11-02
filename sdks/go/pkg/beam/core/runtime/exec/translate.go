@@ -16,6 +16,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/protox"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	fnpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/fnexecution_v1"
 	pipepb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/pipeline_v1"
 	"github.com/golang/protobuf/proto"
@@ -542,7 +544,9 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 								return nil, err
 							}
 							timerIDToCoder[key] = c
+
 							sID := StreamID{Port: Port{URL: b.desc.GetTimerApiServiceDescriptor().GetUrl()}, PtransformID: id.to}
+							log.Infof(context.Background(), "timer sid: %s", sID)
 							ec, wc, err := b.makeCoderForPCollection(input[0])
 							if err != nil {
 								return nil, err

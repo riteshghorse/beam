@@ -29,6 +29,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/ioutilx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 // DataSource is a Root execution unit.
@@ -133,6 +134,9 @@ func (n *DataSource) Process(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	log.Infof(ctx, "datasource.SID: %s", n.SID)
+
 	defer r.Close()
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
 	var byteCount int
