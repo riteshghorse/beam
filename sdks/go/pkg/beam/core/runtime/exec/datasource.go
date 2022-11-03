@@ -137,16 +137,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 
 	log.Infof(ctx, "datasource.SID: %s", n.SID)
 
-	// defer r.Close()
-
-	// if len(elements.Data) > 0 {
-
-	// }
-
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
-	// var byteCount int
-	// bcr := byteCountReader{reader: r, count: &byteCount}
-
 	c := coder.SkipW(n.Coder)
 	wc := MakeWindowDecoder(n.Coder.Window)
 
@@ -168,15 +159,16 @@ func (n *DataSource) Process(ctx context.Context) error {
 		if n.incrementIndexAndCheckSplit() {
 			return nil
 		}
+		log.Info(ctx, "starting to read from channel in ds")
 		elements := <-*ch
-		log.Infof(ctx, "elements from channel: %+v", elements)
+		log.Infof(ctx, "elements from channel: %#v", elements)
 		for _, msg := range elements.Data {
-			r := bytes.Buffer{}
-			r.Write(msg.GetData())
+			log.Infof(ctx, "data received: %+v", msg.GetData())
+			r := bytes.NewReader(msg.GetData())
 			var byteCount int
-			bcr := byteCountReader{reader: &r, count: &byteCount}
+			bcr := byteCountReader{reader: r, count: &byteCount}
 			// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
-			ws, t, pn, err := DecodeWindowedValueHeader(wc, &r)
+			ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
 			if err != nil {
 				if err == io.EOF {
 					return nil
@@ -207,7 +199,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 			}
 			// Collect the actual size of the element, and reset the bytecounter reader.
 			n.PCol.addSize(int64(bcr.reset()))
-			bcr.reader = &r
+			bcr.reader = r
 		}
 
 		for _, msg := range elements.Timers {
