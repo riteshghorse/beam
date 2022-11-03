@@ -17,11 +17,13 @@ package harness
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/exec"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	fnpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/fnexecution_v1"
@@ -66,7 +68,7 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 }
 
 // OpenTimerRead opens an io.ReadCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (io.ReadCloser, error) {
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (*chan typex.Elements, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -178,6 +180,8 @@ type DataChannel struct {
 	writers map[instructionID]map[string]*dataWriter
 	readers map[instructionID]map[string]*dataReader
 
+	channel chan typex.Elements
+
 	// recently terminated instructions
 	endedInstructions map[instructionID]struct{}
 	rmQueue           []instructionID
@@ -217,6 +221,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
+		channel:           make(chan typex.Elements),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}
@@ -252,16 +257,16 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 }
 
 // OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
-func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) io.ReadCloser {
-
+func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) *chan typex.Elements {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cid := clientID{ptransformID: ptransformID, instID: instID}
 	if c.readErr != nil {
-		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
-		return &errReader{c.readErr}
+		panic(fmt.Errorf("opening a reader %v on a closed channel", cid))
+		// return &errReader{c.readErr}
 	}
-	return c.makeReader(ctx, cid)
+	return &c.channel
+	// return c.makeReader(ctx, cid)
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
@@ -306,123 +311,128 @@ func (c *DataChannel) read(ctx context.Context) {
 
 		recordStreamReceive(msg)
 
+		elements := typex.Elements{
+			Data:   msg.GetData(),
+			Timers: msg.GetTimers(),
+		}
+		c.channel <- elements
 		// Each message may contain segments for multiple streams, so we
 		// must treat each segment in isolation. We maintain a local cache
 		// to reduce lock contention.
+		/*
+			for _, elm := range msg.GetData() {
+				id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
 
-		for _, elm := range msg.GetData() {
-			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
+				var r *dataReader
+				if local, ok := cache[id]; ok {
+					r = local
+				} else {
+					c.mu.Lock()
+					r = c.makeReader(ctx, id)
+					c.mu.Unlock()
+					cache[id] = r
+				}
 
-			var r *dataReader
-			if local, ok := cache[id]; ok {
-				r = local
-			} else {
-				c.mu.Lock()
-				r = c.makeReader(ctx, id)
-				c.mu.Unlock()
-				cache[id] = r
-			}
-
-			if elm.GetIsLast() {
-				// If this reader hasn't closed yet, do so now.
-				if !r.completed {
-					// Use the last segment if any.
-					if len(elm.GetData()) != 0 {
-						// In case of local side closing, send with select.
-						select {
-						case r.buf <- elm.GetData():
-						case <-r.done:
+				if elm.GetIsLast() {
+					// If this reader hasn't closed yet, do so now.
+					if !r.completed {
+						// Use the last segment if any.
+						if len(elm.GetData()) != 0 {
+							// In case of local side closing, send with select.
+							select {
+							case r.buf <- elm.GetData():
+							case <-r.done:
+							}
 						}
+						// Close buffer to signal EOF.
+						r.completed = true
+						close(r.buf)
 					}
-					// Close buffer to signal EOF.
+
+					// Clean up local bookkeeping. We'll never see another message
+					// for it again. We have to be careful not to remove the real
+					// one, because readers may be initialized after we've seen
+					// the full stream.
+					delete(cache, id)
+					continue
+				}
+
+				if r.completed {
+					// The local reader has closed but the remote is still sending data.
+					// Just ignore it. We keep the reader config in the cache so we don't
+					// treat it as a new reader. Eventually the stream will finish and go
+					// through normal teardown.
+					continue
+				}
+
+				// This send is deliberately blocking, if we exceed the buffering for
+				// a reader. We can't buffer the entire main input, if some user code
+				// is slow (or gets stuck). If the local side closes, the reader
+				// will be marked as completed and further remote data will be ignored.
+				select {
+				case r.buf <- elm.GetData():
+				case <-r.done:
 					r.completed = true
 					close(r.buf)
 				}
-
-				// Clean up local bookkeeping. We'll never see another message
-				// for it again. We have to be careful not to remove the real
-				// one, because readers may be initialized after we've seen
-				// the full stream.
-				delete(cache, id)
-				continue
 			}
 
-			if r.completed {
-				// The local reader has closed but the remote is still sending data.
-				// Just ignore it. We keep the reader config in the cache so we don't
-				// treat it as a new reader. Eventually the stream will finish and go
-				// through normal teardown.
-				continue
-			}
+			for _, elm := range msg.GetTimers() {
+				log.Infof(ctx, "timers received: %#v", elm)
+				id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
+				var r *dataReader
+				if local, ok := cache[id]; ok {
+					r = local
+				} else {
+					c.mu.Lock()
+					r = c.makeReader(ctx, id)
+					c.mu.Unlock()
+					cache[id] = r
+				}
 
-			// This send is deliberately blocking, if we exceed the buffering for
-			// a reader. We can't buffer the entire main input, if some user code
-			// is slow (or gets stuck). If the local side closes, the reader
-			// will be marked as completed and further remote data will be ignored.
-			select {
-			case r.buf <- elm.GetData():
-			case <-r.done:
-				r.completed = true
-				close(r.buf)
-			}
-		}
-
-		for _, elm := range msg.GetTimers() {
-			log.Infof(ctx, "timers received: %#v", elm)
-			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-			var r *dataReader
-			if local, ok := cache[id]; ok {
-				r = local
-			} else {
-				c.mu.Lock()
-				r = c.makeReader(ctx, id)
-				c.mu.Unlock()
-				cache[id] = r
-			}
-
-			if elm.GetIsLast() {
-				// If this reader hasn't closed yet, do so now.
-				if !r.completed {
-					// Use the last segment if any.
-					if len(elm.GetTimers()) != 0 {
-						// In case of local side closing, send with select.
-						select {
-						case r.buf <- elm.GetTimers():
-						case <-r.done:
+				if elm.GetIsLast() {
+					// If this reader hasn't closed yet, do so now.
+					if !r.completed {
+						// Use the last segment if any.
+						if len(elm.GetTimers()) != 0 {
+							// In case of local side closing, send with select.
+							select {
+							case r.buf <- elm.GetTimers():
+							case <-r.done:
+							}
 						}
+						// Close buffer to signal EOF.
+						r.completed = true
+						close(r.buf)
 					}
-					// Close buffer to signal EOF.
+
+					// Clean up local bookkeeping. We'll never see another message
+					// for it again. We have to be careful not to remove the real
+					// one, because readers may be initialized after we've seen
+					// the full stream.
+					delete(cache, id)
+					continue
+				}
+
+				if r.completed {
+					// The local reader has closed but the remote is still sending data.
+					// Just ignore it. We keep the reader config in the cache so we don't
+					// treat it as a new reader. Eventually the stream will finish and go
+					// through normal teardown.
+					continue
+				}
+
+				// This send is deliberately blocking, if we exceed the buffering for
+				// a reader. We can't buffer the entire main input, if some user code
+				// is slow (or gets stuck). If the local side closes, the reader
+				// will be marked as completed and further remote data will be ignored.
+				select {
+				case r.buf <- elm.GetTimers():
+				case <-r.done:
 					r.completed = true
 					close(r.buf)
 				}
-
-				// Clean up local bookkeeping. We'll never see another message
-				// for it again. We have to be careful not to remove the real
-				// one, because readers may be initialized after we've seen
-				// the full stream.
-				delete(cache, id)
-				continue
-			}
-
-			if r.completed {
-				// The local reader has closed but the remote is still sending data.
-				// Just ignore it. We keep the reader config in the cache so we don't
-				// treat it as a new reader. Eventually the stream will finish and go
-				// through normal teardown.
-				continue
-			}
-
-			// This send is deliberately blocking, if we exceed the buffering for
-			// a reader. We can't buffer the entire main input, if some user code
-			// is slow (or gets stuck). If the local side closes, the reader
-			// will be marked as completed and further remote data will be ignored.
-			select {
-			case r.buf <- elm.GetTimers():
-			case <-r.done:
-				r.completed = true
-				close(r.buf)
-			}
-		}
+			}*/
 	}
 }
 

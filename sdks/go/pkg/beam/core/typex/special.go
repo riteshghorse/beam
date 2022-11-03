@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
+	fnpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/fnexecution_v1"
 )
 
 // This file defines data types that programs use to indicate a
@@ -106,6 +107,12 @@ type TimerMap struct {
 	Clear                        bool
 	FireTimestamp, HoldTimestamp mtime.Time
 	Pane                         PaneInfo
+}
+
+// Elements holds the elements from data channel to be sent to datasource.
+type Elements struct {
+	Data   []*fnpb.Elements_Data
+	Timers []*fnpb.Elements_Timers
 }
 
 // KV, Nullable, CoGBK, WindowedValue represent composite generic types. They are not used
