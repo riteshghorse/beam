@@ -335,7 +335,7 @@ class Environment(object):
       pool.dataDisks.append(disk)
     self.proto.workerPools.append(pool)
 
-    sdk_pipeline_options = options.get_all_options(retain_unknown_options=True)
+    sdk_pipeline_options = options.get_all_options()
     if sdk_pipeline_options:
       self.proto.sdkPipelineOptions = (
           dataflow.Environment.SdkPipelineOptionsValue())
