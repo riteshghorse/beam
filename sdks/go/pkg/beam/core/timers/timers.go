@@ -17,9 +17,11 @@
 package timers
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 var (
@@ -86,6 +88,7 @@ func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
 }
 
 func (t ProcessingTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+	log.Infof(context.Background(), "setting timer in core/timer: %+v", t)
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
 

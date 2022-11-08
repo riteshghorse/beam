@@ -23,6 +23,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 type UserTimerAdapter interface {
@@ -104,6 +105,7 @@ func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 }
 
 func (p timerProvider) Set(t timers.TimerMap) {
+	log.Infof(context.Background(), "setting timer in exec: %+v", t)
 	w, err := p.getWriter(t.Key)
 	if err != nil {
 		panic(err)

@@ -156,17 +156,19 @@ func (n *DataSource) Process(ctx context.Context) error {
 	}
 
 	for {
-		if n.incrementIndexAndCheckSplit() {
-			return nil
-		}
+
 		log.Info(ctx, "starting to read from channel in ds")
 		elements := <-*ch
 		log.Infof(ctx, "elements from channel: %#v", elements)
+		var byteCount int
 		for _, msg := range elements.Data {
 			log.Infof(ctx, "data received: %+v", msg.GetData())
 			r := bytes.NewReader(msg.GetData())
-			var byteCount int
+
 			bcr := byteCountReader{reader: r, count: &byteCount}
+			if n.incrementIndexAndCheckSplit() {
+				return nil
+			}
 			// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
 			ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
 			if err != nil {

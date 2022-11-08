@@ -43,7 +43,7 @@ import (
 )
 
 func init() {
-	register.DoFn3x1[timers.Provider, string, int, string](&keyFn{})
+	register.DoFn3x1[timers.Provider, string, int, string](&KeyFn{})
 }
 
 var (
@@ -58,11 +58,11 @@ var (
 	}
 )
 
-type keyFn struct {
+type KeyFn struct {
 	BasicTimer timers.ProcessingTimeTimer
 }
 
-func (k *keyFn) ProcessElement(t timers.Provider, w string, c int) string {
+func (k *KeyFn) ProcessElement(t timers.Provider, w string, c int) string {
 	k.BasicTimer.Set(t, mtime.FromTime(time.Now().Add(time.Second*2)))
 	return fmt.Sprintf("%s-%d", w, c)
 }
@@ -97,7 +97,7 @@ func main() {
 
 	cap = beam.WindowInto(s, window.NewFixedWindows(time.Second*2), cap)
 
-	cap = beam.ParDo(s, &keyFn{BasicTimer: timers.MakeProcessingTimeTimer("BasicTimer")}, cap)
+	cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeProcessingTimeTimer("BasicTimer")}, cap)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
