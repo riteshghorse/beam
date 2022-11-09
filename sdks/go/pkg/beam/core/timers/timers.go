@@ -87,7 +87,7 @@ func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
 	return e.Kind
 }
 
-func (t ProcessingTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+func (t *ProcessingTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
 	log.Infof(context.Background(), "setting timer in core/timer: %+v", t)
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
@@ -96,10 +96,10 @@ func (t ProcessingTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp 
 	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
 }
 
-func MakeEventTimeTimer(Key string) EventTimeTimer {
-	return EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
+func MakeEventTimeTimer(Key string) *EventTimeTimer {
+	return &EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }
 
-func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
-	return ProcessingTimeTimer{Key: Key, Kind: TimeDomainEventTime}
+func MakeProcessingTimeTimer(Key string) *ProcessingTimeTimer {
+	return &ProcessingTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }

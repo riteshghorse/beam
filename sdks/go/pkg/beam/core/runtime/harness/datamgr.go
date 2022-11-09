@@ -311,16 +311,30 @@ func (c *DataChannel) read(ctx context.Context) {
 
 		recordStreamReceive(msg)
 
-		elements := typex.Elements{
-			Data:   msg.GetData(),
-			Timers: msg.GetTimers(),
-		}
+		// elements := typex.Elements{
+		// 	Data:   msg.GetData(),
+		// 	Timers: msg.GetTimers(),
+		// }
 		log.Info(ctx, "sending elements onto channel")
-		c.channel <- elements
-		log.Infof(ctx, "sent element from datamgr: %v", elements)
+
 		// Each message may contain segments for multiple streams, so we
 		// must treat each segment in isolation. We maintain a local cache
 		// to reduce lock contention.
+		for _, elm := range msg.GetData() {
+			elements := typex.Elements{
+				Data: elm,
+			}
+			c.channel <- elements
+		}
+
+		for _, elm := range msg.GetTimers() {
+			elements := typex.Elements{
+				Timers: elm,
+			}
+			c.channel <- elements
+		}
+
+		log.Infof(ctx, "sent element from datamgr: %v", msg)
 		/*
 			for _, elm := range msg.GetData() {
 				id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}

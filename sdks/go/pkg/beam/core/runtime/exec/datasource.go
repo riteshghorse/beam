@@ -161,11 +161,13 @@ func (n *DataSource) Process(ctx context.Context) error {
 		elements := <-*ch
 		log.Infof(ctx, "elements from channel: %#v", elements)
 		var byteCount int
-		for _, msg := range elements.Data {
-			log.Infof(ctx, "data received: %+v", msg.GetData())
-			r := bytes.NewReader(msg.GetData())
+
+		if elements.Data != nil {
+			log.Infof(ctx, "data received: %+v", elements.Data.GetData())
+			r := bytes.NewReader(elements.Data.GetData())
 
 			bcr := byteCountReader{reader: r, count: &byteCount}
+
 			if n.incrementIndexAndCheckSplit() {
 				return nil
 			}
@@ -204,9 +206,9 @@ func (n *DataSource) Process(ctx context.Context) error {
 			bcr.reader = r
 		}
 
-		for _, msg := range elements.Timers {
-			panic("timers are not available")
-			log.Info(ctx, "timers in ds: %v", msg)
+		if elements.Timers != nil {
+			// panic("timers are not available")
+			log.Info(ctx, "timers in ds: %v", elements.Timers)
 		}
 	}
 }

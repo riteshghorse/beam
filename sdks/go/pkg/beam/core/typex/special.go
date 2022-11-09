@@ -111,8 +111,8 @@ type TimerMap struct {
 
 // Elements holds the elements from data channel to be sent to datasource.
 type Elements struct {
-	Data   []*fnpb.Elements_Data
-	Timers []*fnpb.Elements_Timers
+	Data   *fnpb.Elements_Data
+	Timers *fnpb.Elements_Timers
 }
 
 // KV, Nullable, CoGBK, WindowedValue represent composite generic types. They are not used

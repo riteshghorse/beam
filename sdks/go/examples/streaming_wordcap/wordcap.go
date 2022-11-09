@@ -59,7 +59,7 @@ var (
 )
 
 type KeyFn struct {
-	BasicTimer timers.ProcessingTimeTimer
+	BasicTimer *timers.ProcessingTimeTimer
 }
 
 func (k *KeyFn) ProcessElement(t timers.Provider, w string, c int) string {
