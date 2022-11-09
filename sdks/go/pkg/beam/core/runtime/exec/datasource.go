@@ -205,6 +205,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 		}
 
 		for _, msg := range elements.Timers {
+			panic("timers are not available")
 			log.Info(ctx, "timers in ds: %v", msg)
 		}
 	}
