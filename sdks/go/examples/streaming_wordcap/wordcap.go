@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
@@ -43,7 +42,7 @@ import (
 )
 
 func init() {
-	register.DoFn3x1[timers.Provider, string, int, string](&keyFn{})
+	register.DoFn4x1[beam.Window, timers.Provider, string, int, string](&keyFn{})
 }
 
 var (
@@ -62,8 +61,8 @@ type keyFn struct {
 	BasicTimer timers.ProcessingTimeTimer
 }
 
-func (k *keyFn) ProcessElement(t timers.Provider, w string, c int) string {
-	k.BasicTimer.Set(t, mtime.FromTime(time.Now().Add(time.Second*2)))
+func (k *keyFn) ProcessElement(ws beam.Window, t timers.Provider, w string, c int) string {
+	k.BasicTimer.Set(t, ws.MaxTimestamp().Subtract(time.Second*20))
 	return fmt.Sprintf("%s-%d", w, c)
 }
 

@@ -175,9 +175,9 @@ type DataChannel struct {
 	id     string
 	client dataClient
 
-	writers map[instructionID]map[string]*dataWriter
-	readers map[instructionID]map[string]*dataReader
-
+	writers      map[instructionID]map[string]*dataWriter
+	readers      map[instructionID]map[string]*dataReader
+	timerReaders map[instructionID]map[string]*timerReader
 	// recently terminated instructions
 	endedInstructions map[instructionID]struct{}
 	rmQueue           []instructionID
@@ -217,6 +217,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
+		timerReaders:      make(map[instructionID]map[string]*timerReader),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}
@@ -261,7 +262,7 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
 		return &errReader{c.readErr}
 	}
-	return c.makeReader(ctx, cid)
+	return c.makeTimerReader(ctx, cid)
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
@@ -272,6 +273,7 @@ func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, i
 
 func (c *DataChannel) read(ctx context.Context) {
 	cache := make(map[clientID]*dataReader)
+	timerCache := make(map[clientID]*timerReader)
 	for {
 		msg, err := c.client.Recv()
 		if err != nil {
@@ -283,6 +285,17 @@ func (c *DataChannel) read(ctx context.Context) {
 			// Any other approach is racy, and may cause one of the above
 			// panics.
 			for _, m := range c.readers {
+				for _, r := range m {
+					log.Errorf(ctx, "DataChannel.read %v reader %v closing due to error on channel", c.id, r.id)
+					if !r.completed {
+						r.completed = true
+						r.err = err
+						close(r.buf)
+					}
+					delete(cache, r.id)
+				}
+			}
+			for _, m := range c.timerReaders {
 				for _, r := range m {
 					log.Errorf(ctx, "DataChannel.read %v reader %v closing due to error on channel", c.id, r.id)
 					if !r.completed {
@@ -368,16 +381,16 @@ func (c *DataChannel) read(ctx context.Context) {
 		}
 
 		for _, elm := range msg.GetTimers() {
-			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-			var r *dataReader
-			if local, ok := cache[id]; ok {
+			log.Infof(ctx, "timers received with id: %v \n: %#v", id, elm)
+			var r *timerReader
+			if local, ok := timerCache[id]; ok {
 				r = local
 			} else {
 				c.mu.Lock()
-				r = c.makeReader(ctx, id)
+				r = c.makeTimerReader(ctx, id)
 				c.mu.Unlock()
-				cache[id] = r
+				timerCache[id] = r
 			}
 
 			if elm.GetIsLast() {
@@ -400,7 +413,7 @@ func (c *DataChannel) read(ctx context.Context) {
 				// for it again. We have to be careful not to remove the real
 				// one, because readers may be initialized after we've seen
 				// the full stream.
-				delete(cache, id)
+				delete(timerCache, id)
 				continue
 			}
 
@@ -467,9 +480,41 @@ func (c *DataChannel) makeReader(ctx context.Context, id clientID) *dataReader {
 	return r
 }
 
+// makeTimerReader creates a dataReader. It expects to be called while c.mu is held.
+func (c *DataChannel) makeTimerReader(ctx context.Context, id clientID) *timerReader {
+	var m map[string]*timerReader
+	var ok bool
+	if m, ok = c.timerReaders[id.instID]; !ok {
+		m = make(map[string]*timerReader)
+		c.timerReaders[id.instID] = m
+	}
+
+	if r, ok := m[id.ptransformID]; ok {
+		return r
+	}
+
+	r := &timerReader{id: id, buf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c}
+
+	// Just in case initial data for an instruction arrives *after* an instructon has ended.
+	// eg. it was blocked by another reader being slow, or the other instruction failed.
+	// So we provide a pre-completed reader, and do not cache it, as there's no further cleanup for it.
+	if _, ok := c.endedInstructions[id.instID]; ok {
+		r.completed = true
+		close(r.buf)
+		r.err = io.EOF // In case of any actual data readers, so they terminate without error.
+		return r
+	}
+
+	m[id.ptransformID] = r
+	return r
+}
+
 func (c *DataChannel) removeReader(id clientID) {
 	c.mu.Lock()
 	if m, ok := c.readers[id.instID]; ok {
+		delete(m, id.ptransformID)
+	}
+	if m, ok := c.timerReaders[id.instID]; ok {
 		delete(m, id.ptransformID)
 	}
 	c.mu.Unlock()
@@ -492,11 +537,13 @@ func (c *DataChannel) removeInstruction(instID instructionID) {
 	c.rmQueue = append(c.rmQueue, instID)
 
 	rs := c.readers[instID]
+	ts := c.timerReaders[instID]
 	ws := c.writers[instID]
 
 	// Prevent other users while we iterate.
 	delete(c.readers, instID)
 	delete(c.writers, instID)
+	delete(c.timerReaders, instID)
 	c.mu.Unlock()
 
 	// Close grabs the channel lock, so this must be outside the critical section.
@@ -504,6 +551,9 @@ func (c *DataChannel) removeInstruction(instID instructionID) {
 		r.Close()
 	}
 	for _, w := range ws {
+		w.Close()
+	}
+	for _, w := range ts {
 		w.Close()
 	}
 }
@@ -556,6 +606,10 @@ func (r *dataReader) Close() error {
 	return nil
 }
 
+func (r *dataReader) ReadTimer(p []byte) (int, error) {
+	return 0, nil
+}
+
 func (r *dataReader) Read(buf []byte) (int, error) {
 	if r.cur == nil {
 		b, ok := <-r.buf
@@ -566,6 +620,54 @@ func (r *dataReader) Read(buf []byte) (int, error) {
 			return 0, r.err
 		}
 		r.cur = b
+	}
+
+	// We don't need to check for a 0 length copy from r.cur here, since that's
+	// checked before buffers are handed to the r.buf channel.
+	n := copy(buf, r.cur)
+
+	switch {
+	case len(r.cur) == n:
+		r.cur = nil
+	default:
+		r.cur = r.cur[n:]
+	}
+
+	return n, nil
+}
+
+type timerReader struct {
+	id        clientID
+	buf       chan []byte
+	done      chan bool
+	cur       []byte
+	channel   *DataChannel
+	completed bool
+	err       error
+}
+
+func (r *timerReader) Close() error {
+	r.done <- true
+	r.channel.removeReader(r.id)
+	return nil
+}
+
+func (r *timerReader) Read(buf []byte) (int, error) {
+	log.Infof(context.Background(), "timerreader id: %v", r.id)
+	if r.cur == nil {
+		select {
+		case b, ok := <-r.buf:
+
+			if !ok {
+				if r.err == nil {
+					return 0, io.EOF
+				}
+				return 0, r.err
+			}
+			r.cur = b
+		default:
+			return 0, nil
+		}
 	}
 
 	// We don't need to check for a 0 length copy from r.cur here, since that's

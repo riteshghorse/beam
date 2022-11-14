@@ -135,6 +135,11 @@ func (n *DataSource) Process(ctx context.Context) error {
 		return err
 	}
 
+	// tr, err := n.timer.OpenTimerRead(ctx, n.SID)
+	// if err != nil {
+	// 	return err
+	// }
+
 	log.Infof(ctx, "datasource.SID: %s", n.SID)
 
 	defer r.Close()
@@ -163,6 +168,13 @@ func (n *DataSource) Process(ctx context.Context) error {
 		if n.incrementIndexAndCheckSplit() {
 			return nil
 		}
+
+		// str, err := coder.DecodeStringUTF8(tr)
+		// if err != nil {
+		// 	return errors.Wrap(err, "timer decode in ds failed")
+		// }
+		// log.Infof(ctx, "timer decoding: %s", str)
+		// instead of directly reading
 		// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
 		ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
 		if err != nil {

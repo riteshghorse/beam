@@ -16,19 +16,23 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"path"
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/funcx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/coder"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/metrics"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/util/errorx"
 )
 
@@ -53,8 +57,9 @@ type ParDo struct {
 	reader       StateReader
 	cache        *cacheElm
 
-	status Status
-	err    errorx.GuardedError
+	timerReader io.ReadCloser
+	status      Status
+	err         errorx.GuardedError
 
 	states *metrics.PTransformState
 }
@@ -125,6 +130,26 @@ func (n *ParDo) StartBundle(ctx context.Context, id string, data DataContext) er
 		return n.fail(err)
 	}
 
+	if ta, ok := n.Timer.(*userTimerAdapter); ok {
+		log.Infof(ctx, "sid in pardo: %v", ta.SID)
+		tr, err := n.timerManager.OpenTimerRead(ctx, ta.SID)
+		if err != nil {
+			return n.fail(err)
+		}
+		n.timerReader = tr
+		// var buf []byte
+		// _, err = tr.Read(buf)
+		// if err != nil {
+		// 	n.fail(err)
+		// }
+		// r := bytes.NewReader(buf)
+		// data, err := coder.DecodeStringUTF8(r)
+		// if err != nil {
+		// 	n.fail(err)
+		// }
+		// log.Infof(ctx, "timer data: %v", data)
+	}
+
 	// TODO(BEAM-3303): what to set for StartBundle/FinishBundle window and emitter timestamp?
 
 	if _, err := n.invokeDataFn(n.ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, n.Fn.StartBundleFn(), nil); err != nil {
@@ -140,6 +165,21 @@ func (n *ParDo) ProcessElement(_ context.Context, elm *FullValue, values ...ReSt
 	}
 
 	n.states.Set(n.ctx, metrics.ProcessBundle)
+
+	if n.timerReader != nil {
+		log.Infof(n.ctx, "reading timer now")
+		var buf []byte
+		_, err := n.timerReader.Read(buf)
+		if err != nil && err != io.EOF {
+			return errors.Errorf("can't read timer: %v", err)
+		}
+		r := bytes.NewReader(buf)
+		key, err := coder.DecodeStringUTF8(r)
+		if err != nil && err != io.EOF {
+			return errors.Errorf("error decoding timer key: %v", err)
+		}
+		log.Infof(n.ctx, "timer key: %s", key)
+	}
 
 	return n.processMainInput(&MainInput{Key: *elm, Values: values})
 }
