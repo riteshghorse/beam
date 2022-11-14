@@ -221,7 +221,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
-		channel:           make(chan typex.Elements),
+		channel:           make(chan typex.Elements, 20),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}
@@ -315,7 +315,7 @@ func (c *DataChannel) read(ctx context.Context) {
 		// 	Data:   msg.GetData(),
 		// 	Timers: msg.GetTimers(),
 		// }
-		log.Info(ctx, "sending elements onto channel")
+		log.Infof(ctx, "sending elements onto channel: data: %v, timers: %v, actual timer in msg: %v", len(msg.GetData()), len(msg.GetTimers()), msg.GetTimers())
 
 		// Each message may contain segments for multiple streams, so we
 		// must treat each segment in isolation. We maintain a local cache

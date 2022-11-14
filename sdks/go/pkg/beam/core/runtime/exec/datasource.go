@@ -173,37 +173,36 @@ func (n *DataSource) Process(ctx context.Context) error {
 			}
 			// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
 			ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
+			if err != nil && err != io.EOF {
 				return errors.Wrap(err, "source failed")
 			}
+			if err == nil {
 
-			// Decode key or parallel element.
-			pe, err := cp.Decode(&bcr)
-			if err != nil {
-				return errors.Wrap(err, "source decode failed")
-			}
-			pe.Timestamp = t
-			pe.Windows = ws
-			pe.Pane = pn
-
-			var valReStreams []ReStream
-			for _, cv := range cvs {
-				values, err := n.makeReStream(ctx, cv, &bcr, len(cvs) == 1 && n.singleIterate)
+				// Decode key or parallel element.
+				pe, err := cp.Decode(&bcr)
 				if err != nil {
+					return errors.Wrap(err, "source decode failed")
+				}
+				pe.Timestamp = t
+				pe.Windows = ws
+				pe.Pane = pn
+
+				var valReStreams []ReStream
+				for _, cv := range cvs {
+					values, err := n.makeReStream(ctx, cv, &bcr, len(cvs) == 1 && n.singleIterate)
+					if err != nil {
+						return err
+					}
+					valReStreams = append(valReStreams, values)
+				}
+
+				if err := n.Out.ProcessElement(ctx, pe, valReStreams...); err != nil {
 					return err
 				}
-				valReStreams = append(valReStreams, values)
+				// Collect the actual size of the element, and reset the bytecounter reader.
+				n.PCol.addSize(int64(bcr.reset()))
+				bcr.reader = r
 			}
-
-			if err := n.Out.ProcessElement(ctx, pe, valReStreams...); err != nil {
-				return err
-			}
-			// Collect the actual size of the element, and reset the bytecounter reader.
-			n.PCol.addSize(int64(bcr.reset()))
-			bcr.reader = r
 		}
 
 		if elements.Timers != nil {
