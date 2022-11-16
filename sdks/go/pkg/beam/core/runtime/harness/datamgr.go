@@ -68,7 +68,7 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 }
 
 // OpenTimerRead opens an io.ReadCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (*chan typex.Elements, error) {
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (chan typex.Elements, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -257,7 +257,7 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 }
 
 // OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
-func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) *chan typex.Elements {
+func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) chan typex.Elements {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cid := clientID{ptransformID: ptransformID, instID: instID}
@@ -265,7 +265,7 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 		panic(fmt.Errorf("opening a reader %v on a closed channel", cid))
 		// return &errReader{c.readErr}
 	}
-	return &c.channel
+	return c.channel
 	// return c.makeReader(ctx, cid)
 }
 
@@ -317,19 +317,19 @@ func (c *DataChannel) read(ctx context.Context) {
 		// }
 		log.Infof(ctx, "sending elements onto channel: data: %v, timers: %v, actual timer in msg: %v", len(msg.GetData()), len(msg.GetTimers()), msg.GetTimers())
 
+		for _, elm := range msg.GetTimers() {
+			elements := typex.Elements{
+				Timers: elm,
+			}
+			c.channel <- elements
+		}
+
 		// Each message may contain segments for multiple streams, so we
 		// must treat each segment in isolation. We maintain a local cache
 		// to reduce lock contention.
 		for _, elm := range msg.GetData() {
 			elements := typex.Elements{
 				Data: elm,
-			}
-			c.channel <- elements
-		}
-
-		for _, elm := range msg.GetTimers() {
-			elements := typex.Elements{
-				Timers: elm,
 			}
 			c.channel <- elements
 		}

@@ -158,7 +158,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 	for {
 
 		log.Info(ctx, "starting to read from channel in ds")
-		elements := <-*ch
+		elements := <-ch
 		log.Infof(ctx, "elements from channel: %#v", elements)
 		var byteCount int
 

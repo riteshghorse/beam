@@ -42,7 +42,8 @@ import (
 )
 
 func init() {
-	register.DoFn4x1[beam.Window, timers.Provider, string, int, string](&KeyFn{})
+	register.DoFn5x1[context.Context, beam.Window, timers.Provider, string, func(*int) bool, string](&KeyFn{})
+	register.Iter1[*int]()
 }
 
 var (
@@ -61,9 +62,15 @@ type KeyFn struct {
 	BasicTimer *timers.ProcessingTimeTimer
 }
 
-func (k *KeyFn) ProcessElement(ws beam.Window, t timers.Provider, w string, c int) string {
-	k.BasicTimer.Set(t, ws.MaxTimestamp().Subtract(time.Second*20))
-	return fmt.Sprintf("%s-%d", w, c)
+func (k *KeyFn) ProcessElement(ctx context.Context, ws beam.Window, t timers.Provider, w string, c func(*int) bool) string {
+	var values []int
+	var v int
+	for c(&v) {
+		values = append(values, v)
+	}
+	log.Infof(ctx, "setting timer for %v in a max window of %v", ws.MaxTimestamp().Subtract(20*time.Second), ws.MaxTimestamp())
+	k.BasicTimer.Set(t, ws.MaxTimestamp().Subtract(20*time.Second))
+	return fmt.Sprintf("%s-%d", w, len(values))
 }
 
 func main() {
@@ -96,6 +103,9 @@ func main() {
 
 	cap = beam.WindowInto(s, window.NewFixedWindows(time.Second*60), cap)
 
+	cap = beam.GroupByKey(s, cap)
+
+	// beam.ParDo0(s, func(key string, values func(int) bool) {}, cap)
 	cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeProcessingTimeTimer("BasicTimer")}, cap)
 	debug.Print(s, cap)
 

@@ -71,7 +71,7 @@ type TimerManager interface {
 	// OpenTimerWrite
 	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
 	// OpenTimerRead opens a closable byte stream for reading.
-	OpenTimerRead(ctx context.Context, id StreamID) (*chan typex.Elements, error)
+	OpenTimerRead(ctx context.Context, id StreamID) (chan typex.Elements, error)
 }
 
 // StateReader is the interface for reading side input data.
