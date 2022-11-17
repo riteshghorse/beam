@@ -180,7 +180,7 @@ type DataChannel struct {
 	writers map[instructionID]map[string]*dataWriter
 	readers map[instructionID]map[string]*dataReader
 
-	channel chan typex.Elements
+	channel map[instructionID]chan typex.Elements
 
 	// recently terminated instructions
 	endedInstructions map[instructionID]struct{}
@@ -221,7 +221,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
-		channel:           make(chan typex.Elements, 20),
+		channel:           make(map[instructionID]chan typex.Elements),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}
@@ -265,7 +265,8 @@ func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, in
 		panic(fmt.Errorf("opening a reader %v on a closed channel", cid))
 		// return &errReader{c.readErr}
 	}
-	return c.channel
+
+	return c.makeChannel(ctx, instID)
 	// return c.makeReader(ctx, cid)
 }
 
@@ -276,7 +277,8 @@ func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, i
 }
 
 func (c *DataChannel) read(ctx context.Context) {
-	cache := make(map[clientID]*dataReader)
+	// cache := make(map[clientID]*dataReader)
+
 	for {
 		msg, err := c.client.Recv()
 		if err != nil {
@@ -287,17 +289,17 @@ func (c *DataChannel) read(ctx context.Context) {
 			// close the r.buf channels twice, or send on a closed channel.
 			// Any other approach is racy, and may cause one of the above
 			// panics.
-			for _, m := range c.readers {
-				for _, r := range m {
-					log.Errorf(ctx, "DataChannel.read %v reader %v closing due to error on channel", c.id, r.id)
-					if !r.completed {
-						r.completed = true
-						r.err = err
-						close(r.buf)
-					}
-					delete(cache, r.id)
-				}
-			}
+			// for _, m := range c.readers {
+			// 	for _, r := range m {
+			// 		log.Errorf(ctx, "DataChannel.read %v reader %v closing due to error on channel", c.id, r.id)
+			// 		if !r.completed {
+			// 			r.completed = true
+			// 			r.err = err
+			// 			close(r.buf)
+			// 		}
+			// 		delete(cache, r.id)
+			// 	}
+			// }
 			c.terminateStreamOnError(err)
 			c.mu.Unlock()
 
@@ -311,17 +313,16 @@ func (c *DataChannel) read(ctx context.Context) {
 
 		recordStreamReceive(msg)
 
-		// elements := typex.Elements{
-		// 	Data:   msg.GetData(),
-		// 	Timers: msg.GetTimers(),
-		// }
 		log.Infof(ctx, "sending elements onto channel: data: %v, timers: %v, actual timer in msg: %v", len(msg.GetData()), len(msg.GetTimers()), msg.GetTimers())
 
 		for _, elm := range msg.GetTimers() {
 			elements := typex.Elements{
 				Timers: elm,
 			}
-			c.channel <- elements
+			if _, ok := c.channel[instructionID(elm.InstructionId)]; !ok {
+				c.makeChannel(ctx, instructionID(elm.InstructionId))
+			}
+			c.channel[instructionID(elm.InstructionId)] <- elements
 		}
 
 		// Each message may contain segments for multiple streams, so we
@@ -331,124 +332,13 @@ func (c *DataChannel) read(ctx context.Context) {
 			elements := typex.Elements{
 				Data: elm,
 			}
-			c.channel <- elements
+			if _, ok := c.channel[instructionID(elm.InstructionId)]; !ok {
+				c.makeChannel(ctx, instructionID(elm.InstructionId))
+			}
+			c.channel[instructionID(elm.InstructionId)] <- elements
 		}
 
 		log.Infof(ctx, "sent element from datamgr: %v", msg)
-		/*
-			for _, elm := range msg.GetData() {
-				id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-
-				var r *dataReader
-				if local, ok := cache[id]; ok {
-					r = local
-				} else {
-					c.mu.Lock()
-					r = c.makeReader(ctx, id)
-					c.mu.Unlock()
-					cache[id] = r
-				}
-
-				if elm.GetIsLast() {
-					// If this reader hasn't closed yet, do so now.
-					if !r.completed {
-						// Use the last segment if any.
-						if len(elm.GetData()) != 0 {
-							// In case of local side closing, send with select.
-							select {
-							case r.buf <- elm.GetData():
-							case <-r.done:
-							}
-						}
-						// Close buffer to signal EOF.
-						r.completed = true
-						close(r.buf)
-					}
-
-					// Clean up local bookkeeping. We'll never see another message
-					// for it again. We have to be careful not to remove the real
-					// one, because readers may be initialized after we've seen
-					// the full stream.
-					delete(cache, id)
-					continue
-				}
-
-				if r.completed {
-					// The local reader has closed but the remote is still sending data.
-					// Just ignore it. We keep the reader config in the cache so we don't
-					// treat it as a new reader. Eventually the stream will finish and go
-					// through normal teardown.
-					continue
-				}
-
-				// This send is deliberately blocking, if we exceed the buffering for
-				// a reader. We can't buffer the entire main input, if some user code
-				// is slow (or gets stuck). If the local side closes, the reader
-				// will be marked as completed and further remote data will be ignored.
-				select {
-				case r.buf <- elm.GetData():
-				case <-r.done:
-					r.completed = true
-					close(r.buf)
-				}
-			}
-
-			for _, elm := range msg.GetTimers() {
-				log.Infof(ctx, "timers received: %#v", elm)
-				id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-				var r *dataReader
-				if local, ok := cache[id]; ok {
-					r = local
-				} else {
-					c.mu.Lock()
-					r = c.makeReader(ctx, id)
-					c.mu.Unlock()
-					cache[id] = r
-				}
-
-				if elm.GetIsLast() {
-					// If this reader hasn't closed yet, do so now.
-					if !r.completed {
-						// Use the last segment if any.
-						if len(elm.GetTimers()) != 0 {
-							// In case of local side closing, send with select.
-							select {
-							case r.buf <- elm.GetTimers():
-							case <-r.done:
-							}
-						}
-						// Close buffer to signal EOF.
-						r.completed = true
-						close(r.buf)
-					}
-
-					// Clean up local bookkeeping. We'll never see another message
-					// for it again. We have to be careful not to remove the real
-					// one, because readers may be initialized after we've seen
-					// the full stream.
-					delete(cache, id)
-					continue
-				}
-
-				if r.completed {
-					// The local reader has closed but the remote is still sending data.
-					// Just ignore it. We keep the reader config in the cache so we don't
-					// treat it as a new reader. Eventually the stream will finish and go
-					// through normal teardown.
-					continue
-				}
-
-				// This send is deliberately blocking, if we exceed the buffering for
-				// a reader. We can't buffer the entire main input, if some user code
-				// is slow (or gets stuck). If the local side closes, the reader
-				// will be marked as completed and further remote data will be ignored.
-				select {
-				case r.buf <- elm.GetTimers():
-				case <-r.done:
-					r.completed = true
-					close(r.buf)
-				}
-			}*/
 	}
 }
 
@@ -462,6 +352,14 @@ func (r *errReader) Read(_ []byte) (int, error) {
 
 func (r *errReader) Close() error {
 	return r.err
+}
+
+func (c *DataChannel) makeChannel(ctx context.Context, id instructionID) chan typex.Elements {
+	if m, ok := c.channel[id]; !ok {
+		m = make(chan typex.Elements, 20)
+		c.channel[id] = m
+	}
+	return c.channel[id]
 }
 
 // makeReader creates a dataReader. It expects to be called while c.mu is held.

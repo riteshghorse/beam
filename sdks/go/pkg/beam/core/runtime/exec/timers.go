@@ -105,7 +105,7 @@ func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 }
 
 func (p timerProvider) Set(t timers.TimerMap) {
-	log.Infof(context.Background(), "setting timer in exec: %+v", t)
+	log.Infof(p.ctx, "setting timer in exec: %+v", t)
 	w, err := p.getWriter(t.Key)
 	if err != nil {
 		panic(err)

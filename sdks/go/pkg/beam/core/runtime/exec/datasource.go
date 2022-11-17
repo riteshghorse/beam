@@ -169,6 +169,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 			bcr := byteCountReader{reader: r, count: &byteCount}
 
 			if n.incrementIndexAndCheckSplit() {
+				log.Infof(ctx, "called n.incrementIndexAndCheckSplit() when processing data from: %v", elements)
 				return nil
 			}
 			// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?

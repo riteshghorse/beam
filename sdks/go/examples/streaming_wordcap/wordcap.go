@@ -29,6 +29,7 @@ import (
 	"os"
 	"time"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
@@ -59,7 +60,7 @@ var (
 )
 
 type KeyFn struct {
-	BasicTimer *timers.ProcessingTimeTimer
+	BasicTimer *timers.EventTimeTimer
 }
 
 func (k *KeyFn) ProcessElement(ctx context.Context, ws beam.Window, t timers.Provider, w string, c func(*int) bool) string {
@@ -68,8 +69,8 @@ func (k *KeyFn) ProcessElement(ctx context.Context, ws beam.Window, t timers.Pro
 	for c(&v) {
 		values = append(values, v)
 	}
-	log.Infof(ctx, "setting timer for %v in a max window of %v", ws.MaxTimestamp().Subtract(20*time.Second), ws.MaxTimestamp())
-	k.BasicTimer.Set(t, ws.MaxTimestamp().Subtract(20*time.Second))
+	log.Infof(ctx, "setting timer for %v in a max window of %v", ws.MaxTimestamp().Subtract(5*time.Second), ws.MaxTimestamp())
+	k.BasicTimer.Set(t, ws.MaxTimestamp())
 	return fmt.Sprintf("%s-%d", w, len(values))
 }
 
@@ -83,11 +84,24 @@ func main() {
 	log.Infof(ctx, "Publishing %v messages to: %v", len(data), *input)
 
 	defer pubsubx.CleanupTopic(ctx, project, *input)
-	sub, err := pubsubx.Publish(ctx, project, *input, data...)
-	if err != nil {
-		log.Fatal(ctx, err)
-	}
+	subs := make(chan *pubsub.Subscription, 10)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				sub, err := pubsubx.Publish(ctx, project, *input, data...)
+				if err != nil {
+					log.Fatal(ctx, err)
+				}
+				subs <- sub
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}()
 
+	sub := <-subs
 	log.Infof(ctx, "Running streaming wordcap with subscription: %v", sub.ID())
 
 	p := beam.NewPipeline()
@@ -106,7 +120,7 @@ func main() {
 	cap = beam.GroupByKey(s, cap)
 
 	// beam.ParDo0(s, func(key string, values func(int) bool) {}, cap)
-	cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeProcessingTimeTimer("BasicTimer")}, cap)
+	cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeEventTimeTimer("BasicEventTimer")}, cap)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
