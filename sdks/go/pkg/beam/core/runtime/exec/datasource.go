@@ -143,6 +143,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 
 	var cp ElementDecoder    // Decoder for the primary element or the key in CoGBKs.
 	var cvs []ElementDecoder // Decoders for each value stream in CoGBKs.
+	var byteCount int
 
 	switch {
 	case coder.IsCoGBK(c):
@@ -160,7 +161,6 @@ func (n *DataSource) Process(ctx context.Context) error {
 		log.Info(ctx, "starting to read from channel in ds")
 		elements := <-ch
 		log.Infof(ctx, "elements from channel: %#v", elements)
-		var byteCount int
 
 		if elements.Data != nil {
 			log.Infof(ctx, "data received: %+v", elements.Data.GetData())

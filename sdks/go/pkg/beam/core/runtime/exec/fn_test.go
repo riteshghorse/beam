@@ -576,7 +576,7 @@ func BenchmarkInvokeCall(b *testing.B) {
 	ctx := context.Background()
 	n := 0
 	for i := 0; i < b.N; i++ {
-		ret, _ := InvokeWithoutEventTime(ctx, fn, &MainInput{Key: FullValue{Elm: n}}, nil, nil, nil, nil)
+		ret, _ := InvokeWithoutEventTime(ctx, fn, &MainInput{Key: FullValue{Elm: n}}, nil, nil, nil, nil, nil, nil)
 		n = ret.Elm.(int)
 	}
 	b.Log(n)
@@ -587,7 +587,7 @@ func BenchmarkInvokeCallExtra(b *testing.B) {
 	ctx := context.Background()
 	n := 0
 	for i := 0; i < b.N; i++ {
-		ret, _ := InvokeWithoutEventTime(ctx, fn, nil, nil, nil, nil, nil, n)
+		ret, _ := InvokeWithoutEventTime(ctx, fn, nil, nil, nil, nil, nil, nil, nil, n)
 		n = ret.Elm.(int)
 	}
 	b.Log(n)
@@ -613,7 +613,7 @@ func BenchmarkInvokeFnCall(b *testing.B) {
 	ctx := context.Background()
 	n := 0
 	for i := 0; i < b.N; i++ {
-		ret, _ := InvokeWithoutEventTime(ctx, fn, &MainInput{Key: FullValue{Elm: n}}, nil, nil, nil, nil)
+		ret, _ := InvokeWithoutEventTime(ctx, fn, &MainInput{Key: FullValue{Elm: n}}, nil, nil, nil, nil, nil, nil)
 		n = ret.Elm.(int)
 	}
 	b.Log(n)
@@ -624,7 +624,7 @@ func BenchmarkInvokeFnCallExtra(b *testing.B) {
 	ctx := context.Background()
 	n := 0
 	for i := 0; i < b.N; i++ {
-		ret, _ := InvokeWithoutEventTime(ctx, fn, nil, nil, nil, nil, nil, n)
+		ret, _ := InvokeWithoutEventTime(ctx, fn, nil, nil, nil, nil, nil, nil, nil, n)
 		n = ret.Elm.(int)
 	}
 	b.Log(n)

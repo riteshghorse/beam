@@ -626,6 +626,7 @@ func (w *dataWriter) writeTimers(p []byte) error {
 		},
 	}
 	// w.buf = w.buf[:0]
+	panic("trying to write timers")
 	log.Infof(context.Background(), "writing timers: %v", msg)
 	return w.send(msg)
 }

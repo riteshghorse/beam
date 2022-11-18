@@ -1372,7 +1372,6 @@ func validateTimer(fn *DoFn) error {
 				", Ensure that you are using the TimerProvider to set/clear the timers.", pt)
 		}
 	}
-
 	return nil
 }
 

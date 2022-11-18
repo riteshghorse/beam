@@ -44,7 +44,7 @@ func TestTimerEncodingDecoding(t *testing.T) {
 			tm: typex.TimerMap{
 				Key:           "Basic",
 				Tag:           "first",
-				Windows:       window.SingleGlobalWindow,
+				Windows:       window.SingleGlobalWindow[0],
 				Clear:         false,
 				FireTimestamp: mtime.Now(),
 			},
@@ -55,7 +55,7 @@ func TestTimerEncodingDecoding(t *testing.T) {
 			tm: typex.TimerMap{
 				Key:           "Basic",
 				Tag:           "",
-				Windows:       window.SingleGlobalWindow,
+				Windows:       window.SingleGlobalWindow[0],
 				Clear:         false,
 				FireTimestamp: mtime.Now(),
 			},
@@ -66,7 +66,7 @@ func TestTimerEncodingDecoding(t *testing.T) {
 			tm: typex.TimerMap{
 				Key:           "Basic",
 				Tag:           "first",
-				Windows:       window.SingleGlobalWindow,
+				Windows:       window.SingleGlobalWindow[0],
 				Clear:         true,
 				FireTimestamp: mtime.Now(),
 			},

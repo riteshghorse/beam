@@ -58,11 +58,12 @@ type EventTimeTimer struct {
 	Kind TimeDomainEnum
 }
 
-func (t *EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+func (t EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+	panic("setting timers in timers/timers.go")
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
 
-func (t *EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
+func (t EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
 	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
 }
 
@@ -96,8 +97,8 @@ func (t ProcessingTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp 
 	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
 }
 
-func MakeEventTimeTimer(Key string) *EventTimeTimer {
-	return &EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
+func MakeEventTimeTimer(Key string) EventTimeTimer {
+	return EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }
 
 func MakeProcessingTimeTimer(Key string) *ProcessingTimeTimer {

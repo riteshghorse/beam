@@ -90,7 +90,7 @@ func (n *ParDo) Up(ctx context.Context) error {
 	// Subsequent bundles might run this same node, and the context here would be
 	// incorrectly refering to the older bundleId.
 	setupCtx := metrics.SetPTransformID(ctx, n.PID)
-	if _, err := InvokeWithoutEventTime(setupCtx, n.Fn.SetupFn(), nil, nil, nil, nil, nil); err != nil {
+	if _, err := InvokeWithoutEventTime(setupCtx, n.Fn.SetupFn(), nil, nil, nil, nil, nil, nil, nil); err != nil {
 		return n.fail(err)
 	}
 
@@ -257,7 +257,7 @@ func (n *ParDo) Down(ctx context.Context) error {
 	n.cache = nil
 	n.timerManager = nil
 
-	if _, err := InvokeWithoutEventTime(ctx, n.Fn.TeardownFn(), nil, nil, nil, nil, nil); err != nil {
+	if _, err := InvokeWithoutEventTime(ctx, n.Fn.TeardownFn(), nil, nil, nil, nil, nil, nil, nil); err != nil {
 		n.err.TrySetError(err)
 	}
 	return n.err.Error()

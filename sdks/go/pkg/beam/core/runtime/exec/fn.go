@@ -28,6 +28,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 //go:generate specialize --input=fn_arity.tmpl
@@ -79,12 +80,12 @@ func Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Window, ts typex.
 }
 
 // InvokeWithoutEventTime runs the given function at time 0 in the global window.
-func InvokeWithoutEventTime(ctx context.Context, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, sa UserStateAdapter, reader StateReader, extra ...interface{}) (*FullValue, error) {
+func InvokeWithoutEventTime(ctx context.Context, fn *funcx.Fn, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, sa UserStateAdapter, reader StateReader, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
 	if fn == nil {
 		return nil, nil // ok: nothing to Invoke
 	}
 	inv := newInvoker(fn)
-	return inv.InvokeWithoutEventTime(ctx, opt, bf, we, sa, reader, extra...)
+	return inv.InvokeWithoutEventTime(ctx, opt, bf, we, sa, reader, ta, tm, extra...)
 }
 
 // invoker is a container struct for hot path invocations of DoFns, to avoid
@@ -161,8 +162,8 @@ func (n *invoker) Reset() {
 }
 
 // InvokeWithoutEventTime runs the function at time 0 in the global window.
-func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, sa UserStateAdapter, reader StateReader, extra ...interface{}) (*FullValue, error) {
-	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, sa, reader, nil, nil, extra...)
+func (n *invoker) InvokeWithoutEventTime(ctx context.Context, opt *MainInput, bf *bundleFinalizer, we sdf.WatermarkEstimator, sa UserStateAdapter, reader StateReader, ta UserTimerAdapter, tm TimerManager, extra ...interface{}) (*FullValue, error) {
+	return n.Invoke(ctx, typex.NoFiringPane(), window.SingleGlobalWindow, mtime.ZeroTimestamp, opt, bf, we, sa, reader, ta, tm, extra...)
 }
 
 // Invoke invokes the fn with the given values. The extra values must match the non-main
@@ -206,12 +207,14 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 	}
 
 	if n.tpIdx >= 0 {
-		tp, err := ta.NewTimerProvider(ctx, tm, ws, opt)
+		log.Info(ctx, "creating timer provider")
+		tp, err := ta.NewTimerProvider(ctx, tm, ws[0], opt)
 		if err != nil {
 			return nil, err
 		}
+		log.Infof(ctx, "timer provider created: %v", tp)
 		n.tp = &tp
-		args[n.tpIdx] = tp
+		args[n.tpIdx] = n.tp
 	}
 
 	// (2) Main input from value, if any.

@@ -536,6 +536,7 @@ func (b *builder) makeLink(from string, id linkID) (Node, error) {
 					}
 
 					if len(userTimers) > 0 {
+						panic("creating timer adapter")
 						timerIDToCoder := make(map[string]*coder.Coder)
 						for key, spec := range userTimers {
 							cID := spec.GetTimerFamilyCoderId()

@@ -27,7 +27,7 @@ import (
 )
 
 type UserTimerAdapter interface {
-	NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error)
+	NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error)
 }
 
 type userTimerAdapter struct {
@@ -52,7 +52,7 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoders map[string]*c
 	return &userTimerAdapter{SID: sID, wc: wc, kc: kc, C: c, timerIDToCoder: timerCoders}
 }
 
-func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error) {
+func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w typex.Window, element interface{}) (timerProvider, error) {
 	if u.kc == nil {
 		return timerProvider{}, fmt.Errorf("cannot make a state provider for an unkeyed input %v", element)
 	}
@@ -61,10 +61,6 @@ func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerMan
 		return timerProvider{}, err
 	}
 
-	// win, err := EncodeWindow(u.wc, w[0])
-	// if err != nil {
-	// 	return timerProvider{}, err
-	// }
 	tp := timerProvider{
 		ctx:          ctx,
 		tm:           manager,
@@ -83,7 +79,7 @@ type timerProvider struct {
 	tm         TimerManager
 	SID        StreamID
 	elementKey []byte
-	window     []typex.Window
+	window     typex.Window
 
 	pn typex.PaneInfo
 
@@ -104,8 +100,9 @@ func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 	}
 }
 
-func (p timerProvider) Set(t timers.TimerMap) {
+func (p *timerProvider) Set(t timers.TimerMap) {
 	log.Infof(p.ctx, "setting timer in exec: %+v", t)
+	panic("can't set the timer")
 	w, err := p.getWriter(t.Key)
 	if err != nil {
 		panic(err)

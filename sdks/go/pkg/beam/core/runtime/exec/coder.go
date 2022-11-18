@@ -1228,7 +1228,7 @@ func encodeTimer(elm ElementEncoder, win WindowEncoder, tm typex.TimerMap, w io.
 		return errors.WithContext(err, "error encoding tag")
 	}
 
-	if err := win.Encode(tm.Windows, &b); err != nil {
+	if err := win.Encode([]typex.Window{tm.Windows}, &b); err != nil {
 		return errors.WithContext(err, "error encoding window")
 	}
 	if err := coder.EncodeBool(tm.Clear, &b); err != nil {
@@ -1274,7 +1274,7 @@ func decodeTimer(dec ElementDecoder, win WindowDecoder, r io.Reader) (typex.Time
 	if err != nil {
 		return tm, errors.WithContext(err, "error decoding timer window")
 	}
-	tm.Windows = w
+	tm.Windows = w[0]
 
 	c, err := coder.DecodeBool(r)
 	if err != nil {

@@ -103,7 +103,7 @@ type Timers struct {
 // TimerMap is a placeholder for timer details used in encoding/decoding.
 type TimerMap struct {
 	Key, Tag                     string
-	Windows                      []Window // []typex.Window
+	Windows                      Window // []typex.Window
 	Clear                        bool
 	FireTimestamp, HoldTimestamp mtime.Time
 	Pane                         PaneInfo

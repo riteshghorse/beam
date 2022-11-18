@@ -32,7 +32,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/state"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/options/gcpopts"
@@ -43,8 +43,7 @@ import (
 )
 
 func init() {
-	register.DoFn5x1[context.Context, beam.Window, timers.Provider, string, func(*int) bool, string](&KeyFn{})
-	register.Iter1[*int]()
+	register.DoFn5x1[context.Context, beam.Window, state.Provider, string, int, string](&KeyFn{})
 }
 
 var (
@@ -60,18 +59,16 @@ var (
 )
 
 type KeyFn struct {
-	BasicTimer *timers.EventTimeTimer
+	// BasicTimer timers.EventTimeTimer
+	BasicState state.Value[int]
 }
 
-func (k *KeyFn) ProcessElement(ctx context.Context, ws beam.Window, t timers.Provider, w string, c func(*int) bool) string {
-	var values []int
-	var v int
-	for c(&v) {
-		values = append(values, v)
-	}
-	log.Infof(ctx, "setting timer for %v in a max window of %v", ws.MaxTimestamp().Subtract(5*time.Second), ws.MaxTimestamp())
-	k.BasicTimer.Set(t, ws.MaxTimestamp())
-	return fmt.Sprintf("%s-%d", w, len(values))
+func (k *KeyFn) ProcessElement(ctx context.Context, ws beam.Window, t state.Provider, w string, c int) string {
+	log.Infof(ctx, "setting timer for %v in a max window of %v", ws.MaxTimestamp(), ws.MaxTimestamp())
+	// panic("setting the timer")
+	// k.BasicTimer.Set(t, ws.MaxTimestamp())
+	// panic("timer set")
+	return fmt.Sprintf("%s-%d", w, c)
 }
 
 func main() {
@@ -108,19 +105,17 @@ func main() {
 	s := p.Root()
 
 	col := pubsubio.Read(s, project, *input, &pubsubio.ReadOptions{Subscription: sub.ID()})
+	cap := beam.WindowInto(s, window.NewFixedWindows(time.Second*60), col)
+
 	str := beam.ParDo(s, func(b []byte) string {
-		return (string)(b)
-	}, col)
-	cap := beam.ParDo(s, func(s string, emit func(string, int)) {
+		return string(b[:])
+	}, cap)
+	cap = beam.ParDo(s, func(s string, emit func(string, int)) {
 		emit(s, 1)
 	}, str)
 
-	cap = beam.WindowInto(s, window.NewFixedWindows(time.Second*60), cap)
-
-	cap = beam.GroupByKey(s, cap)
-
-	// beam.ParDo0(s, func(key string, values func(int) bool) {}, cap)
-	cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeEventTimeTimer("BasicEventTimer")}, cap)
+	cap = beam.ParDo(s, &KeyFn{BasicState: state.MakeValueState[int]("key1")}, cap)
+	// cap = beam.ParDo(s, &KeyFn{BasicTimer: timers.MakeEventTimeTimer("BasicEventTimer"), BasicState: state.MakeValueState[int]("key1")}, cap)
 	debug.Print(s, cap)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
