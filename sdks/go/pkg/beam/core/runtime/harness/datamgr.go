@@ -221,7 +221,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
-		channel:           make(chan typex.Elements),
+		channel:           make(chan typex.Elements, 20),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}

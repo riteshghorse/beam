@@ -58,11 +58,11 @@ type EventTimeTimer struct {
 	Kind TimeDomainEnum
 }
 
-func (t *EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+func (t EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
 
-func (t *EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
+func (t EventTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
 	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
 }
 

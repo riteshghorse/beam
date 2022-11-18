@@ -205,7 +205,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 		}
 
 		for _, msg := range elements.Timers {
-			log.Info(ctx, "timers in ds: %v", msg)
+			log.Infof(ctx, "timers in ds: %v", msg)
 		}
 	}
 }
