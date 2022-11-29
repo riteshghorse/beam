@@ -52,7 +52,7 @@ func NewUserTimerAdapter(sID StreamID, c *coder.Coder, timerCoders map[string]*c
 	return &userTimerAdapter{SID: sID, wc: wc, kc: kc, C: c, timerIDToCoder: timerCoders}
 }
 
-func (u userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error) {
+func (u *userTimerAdapter) NewTimerProvider(ctx context.Context, manager TimerManager, w []typex.Window, element interface{}) (timerProvider, error) {
 	if u.kc == nil {
 		return timerProvider{}, fmt.Errorf("cannot make a state provider for an unkeyed input %v", element)
 	}
@@ -104,7 +104,7 @@ func (p *timerProvider) getWriter(key string) (io.Writer, error) {
 	}
 }
 
-func (p timerProvider) Set(t timers.TimerMap) {
+func (p *timerProvider) Set(t timers.TimerMap) {
 	log.Infof(context.Background(), "setting timer in exec: %+v", t)
 	w, err := p.getWriter(t.Key)
 	if err != nil {

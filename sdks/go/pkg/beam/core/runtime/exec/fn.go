@@ -211,7 +211,7 @@ func (n *invoker) Invoke(ctx context.Context, pn typex.PaneInfo, ws []typex.Wind
 			return nil, err
 		}
 		n.tp = &tp
-		args[n.tpIdx] = tp
+		args[n.tpIdx] = n.tp
 	}
 
 	// (2) Main input from value, if any.

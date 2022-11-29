@@ -173,7 +173,7 @@ func (n *DataSource) Process(ctx context.Context) error {
 			ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
 			if err != nil {
 				if err == io.EOF {
-					return nil
+					break
 				}
 				return errors.Wrap(err, "source failed")
 			}
