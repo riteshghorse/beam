@@ -21,6 +21,7 @@ import (
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang/python"
 )
 
@@ -95,9 +96,8 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, opts .
 	pet.WithKwargs(cfg.kwargs)
 	pet.WithArgs(cfg.args)
 	pl := beam.CrossLanguagePayload(pet)
-	// namedOutput := map[string]typex.FullType{"setOutput": typex.New(outputT)}
-	namedOutput := beam.UnnamedOutput(typex.New(outputT))
-	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), namedOutput)
+	namedInput := map[string]beam.PCollection{xlang.SetOutputCoder: col}
+	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInput, beam.UnnamedOutput(typex.New(outputT)))
 	return result[beam.UnnamedOutputTag()]
 }
 

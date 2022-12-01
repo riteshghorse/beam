@@ -31,6 +31,8 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	jobpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/jobmanagement_v1"
 	pipepb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/pipeline_v1"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang"
+
 	"google.golang.org/grpc"
 )
 
@@ -111,9 +113,16 @@ func expand(
 		ext.ExpansionAddr = config
 	}
 
+	var set bool
+	for tag := range edge.External.InputsMap {
+		if tag == xlang.SetOutputCoder {
+			set = true
+		}
+	}
+
 	outputCoderID := make(map[string]string)
 	for tag, id := range edge.External.OutputsMap {
-		if tag == "setOuput" {
+		if set {
 			outputCoderID[tag] = edge.Output[id].To.Coder.ID
 		}
 	}
