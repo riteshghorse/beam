@@ -24,7 +24,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/bigquery v1.44.0
-	cloud.google.com/go/datastore v1.9.0
+	cloud.google.com/go/datastore v1.10.0
 	cloud.google.com/go/profiler v0.3.0
 	cloud.google.com/go/pubsub v1.26.0
 	cloud.google.com/go/storage v1.28.0
@@ -54,7 +54,7 @@ require (
 	golang.org/x/sys v0.2.0
 	golang.org/x/text v0.4.0
 	google.golang.org/api v0.103.0
-	google.golang.org/genproto v0.0.0-20221117204609-8f9c96812029
+	google.golang.org/genproto v0.0.0-20221118155620-16455021b5e6
 	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/retry.v1 v1.0.3
