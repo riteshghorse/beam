@@ -28,6 +28,8 @@ import (
 
 const (
 	pythonCallableUrn = "beam:logical_type:python_callable:v1"
+	// ExpansionServiceModule is the module containing the python expansion service for python external transforms.
+	ExpansionServiceModule = "apache_beam.runners.portability.expansion_service_main"
 )
 
 var (
@@ -37,7 +39,7 @@ var (
 
 func init() {
 	beam.RegisterType(pcsType)
-	beam.RegisterSchemaProviderWithURN(pcsType, &CallableSourceProvider{}, pythonCallableUrn)
+	beam.RegisterSchemaProviderWithURN(pcsType, &callableSourceProvider{}, pythonCallableUrn)
 }
 
 // CallableSource is a wrapper object storing a Python function definition
@@ -66,11 +68,11 @@ func init() {
 // in which case `func` would get applied to each element.
 type CallableSource string
 
-// CallableSourceProvider implement the SchemaProvider interface for logical types
-type CallableSourceProvider struct{}
+// callableSourceProvider implement the SchemaProvider interface for logical types
+type callableSourceProvider struct{}
 
 // FromLogicalType returns the goType of the logical type
-func (p *CallableSourceProvider) FromLogicalType(rt reflect.Type) (reflect.Type, error) {
+func (p *callableSourceProvider) FromLogicalType(rt reflect.Type) (reflect.Type, error) {
 	if rt != pcsType {
 		return nil, fmt.Errorf("unable to provide schema.LogicalType for type %v, want %v", rt, pcsType)
 	}
@@ -78,7 +80,7 @@ func (p *CallableSourceProvider) FromLogicalType(rt reflect.Type) (reflect.Type,
 }
 
 // BuildEncoder encodes the PythonCallableSource logical type
-func (p *CallableSourceProvider) BuildEncoder(rt reflect.Type) (func(interface{}, io.Writer) error, error) {
+func (p *callableSourceProvider) BuildEncoder(rt reflect.Type) (func(interface{}, io.Writer) error, error) {
 	if _, err := p.FromLogicalType(rt); err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func (p *CallableSourceProvider) BuildEncoder(rt reflect.Type) (func(interface{}
 }
 
 // BuildDecoder decodes the PythonCallableSource logical type
-func (p *CallableSourceProvider) BuildDecoder(rt reflect.Type) (func(io.Reader) (interface{}, error), error) {
+func (p *callableSourceProvider) BuildDecoder(rt reflect.Type) (func(io.Reader) (interface{}, error), error) {
 	if _, err := p.FromLogicalType(rt); err != nil {
 		return nil, err
 	}

@@ -166,7 +166,7 @@ func inferCoder(t FullType) (*coder.Coder, error) {
 			return &coder.Coder{Kind: coder.Iterable, T: t, Components: []*coder.Coder{c}}, nil
 
 		default:
-			panic(fmt.Sprintf("type didn't implement container kind %v", t))
+			panic(fmt.Sprintf("inferCoder: unknown container kind %v", t))
 		}
 	case typex.Concrete:
 		switch t.Type() {
@@ -198,9 +198,6 @@ func inferCoder(t FullType) (*coder.Coder, error) {
 
 		case reflectx.String:
 			return &coder.Coder{Kind: coder.String, T: t}, nil
-
-		// case reflectx.ByteSlice:
-		// 	return &coder.Coder{Kind: coder.Bytes, T: t}, nil
 
 		case reflectx.Bool:
 			return &coder.Coder{Kind: coder.Bool, T: t}, nil
