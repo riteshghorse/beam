@@ -112,9 +112,17 @@ func expand(
 		ext.ExpansionAddr = config
 	}
 
+	var set bool
+	for tag, _ := range edge.External.InputsMap {
+		if tag == "main" {
+			set = true
+		}
+	}
 	outputCoderID := make(map[string]string)
 	for tag, id := range edge.External.OutputsMap {
-		outputCoderID[tag] = edge.Output[id].To.Coder.ID
+		if set {
+			outputCoderID[tag] = edge.Output[id].To.Coder.ID
+		}
 	}
 	return h(ctx, &HandlerParams{
 		Config: config,

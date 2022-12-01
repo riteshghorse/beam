@@ -95,7 +95,8 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, opts .
 	pet.WithKwargs(cfg.kwargs)
 	pet.WithArgs(cfg.args)
 	pl := beam.CrossLanguagePayload(pet)
-	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(typex.New(outputT)))
+	named := map[string]beam.PCollection{"main": col}
+	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, named, beam.UnnamedOutput(typex.New(outputT)))
 	return result[beam.UnnamedOutputTag()]
 }
 
