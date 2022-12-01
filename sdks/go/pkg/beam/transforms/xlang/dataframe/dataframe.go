@@ -22,10 +22,7 @@ import (
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
-<<<<<<< HEAD
-=======
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/xlangx"
->>>>>>> 57e5b69f45bfc11c6060a76888364383ac71d9a4
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang/python"
 )

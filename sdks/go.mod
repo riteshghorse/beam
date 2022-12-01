@@ -128,16 +128,9 @@ require (
 	github.com/shabbyrobe/gocovmerge v0.0.0-20180507124511-f6ea450bfb63 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-<<<<<<< HEAD
-	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/exp v0.0.0-20221012211006-4de253d81b95
-	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
-	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
-=======
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
->>>>>>> 57e5b69f45bfc11c6060a76888364383ac71d9a4
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
