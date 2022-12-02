@@ -17,10 +17,13 @@
 package inference
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/xlangx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang/python"
 )
@@ -29,7 +32,7 @@ func init() {
 	beam.RegisterType(reflect.TypeOf((*config)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*argStruct)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*KwargStruct)(nil)).Elem())
-	beam.RegisterType(outputT)
+	beam.RegisterType(reflect.TypeOf((*PredictionResult)(nil)).Elem())
 }
 
 var outputT = reflect.TypeOf((*PredictionResult)(nil)).Elem()
@@ -75,8 +78,16 @@ type argStruct struct {
 
 // KwargStruct represents
 type KwargStruct struct {
+	// ModelHandlerProvider defines the model handler to be used.
 	ModelHandlerProvider python.CallableSource `beam:"model_handler_provider"`
-	ModelURI             string                `beam:"model_uri"`
+
+	// ModelURI indicates the model path to be used for Sklearn Model Handler.
+	ModelURI string `beam:"model_uri"`
+
+	// // Following parameters are needed Pytorch RunInference
+	// StateDictPath *string                `beam:"state_dict_path"`
+	// ModelClass    *python.CallableSource `beam:"model_class"`
+	// ModelParams   *map[string]string     `beam:"model_params"`
 }
 
 // Actual RunInference
@@ -88,9 +99,8 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, opts .
 		opt(&cfg)
 	}
 	cfg.kwargs.ModelHandlerProvider = python.CallableSource(modelLoader)
-	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
-		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
+		cfg.expansionAddr = xlangx.UseAutomatedPythonExpansionService(python.ExpansionServiceModule)
 	}
 	pet := python.NewExternalTransform[argStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
 	pet.WithKwargs(cfg.kwargs)
@@ -110,15 +120,16 @@ func RunInferenceWithKV(s beam.Scope, modelLoader string, col beam.PCollection, 
 		opt(&cfg)
 	}
 	cfg.kwargs.ModelHandlerProvider = python.CallableSource(modelLoader)
-	// TODO: load automatic expansion service here
 	if cfg.expansionAddr == "" {
-		panic("no expansion service address provided for inference.RunInference(), pass inference.WithExpansionAddr(address) as a param.")
+		cfg.expansionAddr = xlangx.UseAutomatedPythonExpansionService(python.ExpansionServiceModule)
 	}
 	pet := python.NewExternalTransform[argStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
 	pet.WithKwargs(cfg.kwargs)
 	pet.WithArgs(cfg.args)
 	pl := beam.CrossLanguagePayload(pet)
 	outputKV := typex.NewKV(typex.New(outT), typex.New(outputT))
-	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, beam.UnnamedInput(col), beam.UnnamedOutput(outputKV))
+	namedInput := map[string]beam.PCollection{xlang.SetOutputCoder: col}
+	result := beam.CrossLanguage(s, "beam:transforms:python:fully_qualified_named", pl, cfg.expansionAddr, namedInput, beam.UnnamedOutput(outputKV))
+	log.Infof(context.Background(), "the pcollection is : %v", result)
 	return result[beam.UnnamedOutputTag()]
 }

@@ -100,6 +100,21 @@ func addNamespace(t *pipepb.PTransform, c *pipepb.Components, namespace string) 
 		}
 	}
 
+	// updated component coderIDs for other coders not present in t.Inputs, t.Outputs
+	for id, coder := range c.GetCoders() {
+		if _, exists := idMap[id]; exists {
+			continue
+		}
+		var updatedComponentCoderIDs []string
+		updatedComponentCoderIDs = append(updatedComponentCoderIDs, coder.ComponentCoderIds...)
+		for i, ccid := range coder.GetComponentCoderIds() {
+			if _, exists := idMap[ccid]; exists {
+				updatedComponentCoderIDs[i] = idMap[ccid]
+			}
+		}
+		coder.ComponentCoderIds = updatedComponentCoderIDs
+	}
+
 	// c.Transforms = make(map[string]*pipepb.PTransform)
 	sourceName := t.UniqueName
 	for _, t := range c.Transforms {
