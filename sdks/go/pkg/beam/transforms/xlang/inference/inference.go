@@ -28,7 +28,7 @@ import (
 
 func init() {
 	beam.RegisterType(reflect.TypeOf((*config)(nil)).Elem())
-	beam.RegisterType(reflect.TypeOf((*ArgStruct)(nil)).Elem())
+	beam.RegisterType(reflect.TypeOf((*argStruct)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*KwargStruct)(nil)).Elem())
 	beam.RegisterType(reflect.TypeOf((*PredictionResult)(nil)).Elem())
 }
@@ -43,7 +43,7 @@ type PredictionResult struct {
 
 type config struct {
 	kwargs        KwargStruct
-	args          ArgStruct
+	args          argStruct
 	expansionAddr string
 }
 
@@ -59,7 +59,7 @@ func WithKwarg(kwargs KwargStruct) configOption {
 // Sets arguments for the python transform parameters
 func WithArgs(args []string) configOption {
 	return func(c *config) {
-		c.args.Args = append(c.args.Args, args...)
+		c.args.args = append(c.args.args, args...)
 	}
 }
 
@@ -70,8 +70,8 @@ func WithExpansionAddr(expansionAddr string) configOption {
 	}
 }
 
-type ArgStruct struct {
-	Args []string
+type argStruct struct {
+	args []string
 }
 
 // KwargStruct represents
@@ -100,7 +100,7 @@ func RunInference(s beam.Scope, modelLoader string, col beam.PCollection, opts .
 	if cfg.expansionAddr == "" {
 		cfg.expansionAddr = xlangx.UseAutomatedPythonExpansionService(python.ExpansionServiceModule)
 	}
-	pet := python.NewExternalTransform[ArgStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
+	pet := python.NewExternalTransform[argStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
 	pet.WithKwargs(cfg.kwargs)
 	pet.WithArgs(cfg.args)
 	pl := beam.CrossLanguagePayload(pet)
@@ -121,7 +121,7 @@ func RunInferenceWithKV(s beam.Scope, modelLoader string, col beam.PCollection, 
 	if cfg.expansionAddr == "" {
 		cfg.expansionAddr = xlangx.UseAutomatedPythonExpansionService(python.ExpansionServiceModule)
 	}
-	pet := python.NewExternalTransform[ArgStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
+	pet := python.NewExternalTransform[argStruct, KwargStruct]("apache_beam.ml.inference.base.RunInference.from_callable")
 	pet.WithKwargs(cfg.kwargs)
 	pet.WithArgs(cfg.args)
 	pl := beam.CrossLanguagePayload(pet)
