@@ -55,6 +55,7 @@ def sparkTestProperties(overrides = [:]) {
       "spark.sql.shuffle.partitions": "4",
       "spark.ui.enabled"            : "false",
       "spark.ui.showConsoleProgress": "false",
+      "spark.kryo.registrationRequired": "true", // be strict in tests
       "beamTestPipelineOptions"     :
           JsonOutput.toJson((defaults + overrides).collect { k, v -> "$k=$v" })
   ]
@@ -152,15 +153,16 @@ dependencies {
   implementation project(":sdks:java:fn-execution")
   implementation library.java.vendored_grpc_1_48_1
   implementation library.java.vendored_guava_26_0_jre
-  implementation "io.dropwizard.metrics:metrics-core:3.1.5" // version used by Spark 2.4
   spark.components.each { component ->
     provided "$component:$spark_version"
   }
   permitUnusedDeclared "org.apache.spark:spark-network-common_$spark_scala_version:$spark_version"
   if (project.property("spark_scala_version").equals("2.11")) {
+    implementation "io.dropwizard.metrics:metrics-core:3.1.5" // version used by Spark 2.4
     compileOnly "org.scala-lang:scala-library:2.11.12"
     runtimeOnly library.java.jackson_module_scala_2_11
   } else {
+    implementation "io.dropwizard.metrics:metrics-core:4.1.1" // version used by Spark 3.1
     compileOnly "org.scala-lang:scala-library:2.12.15"
     runtimeOnly library.java.jackson_module_scala_2_12
   }
@@ -183,6 +185,7 @@ dependencies {
   testImplementation library.java.kafka_clients
   testImplementation library.java.junit
   testImplementation library.java.mockito_core
+  testImplementation "org.assertj:assertj-core:3.11.1"
   testImplementation "org.apache.zookeeper:zookeeper:3.4.11"
   validatesRunner project(path: ":sdks:java:core", configuration: "shadowTest")
   validatesRunner project(path: ":runners:core-java", configuration: "testRuntimeMigration")
@@ -205,6 +208,8 @@ configurations.all {
   exclude group: "org.slf4j", module: "slf4j-jdk14"
   // Avoid any transitive usage of the old codahale group to make dependency resolution deterministic
   exclude group: "com.codahale.metrics", module: "metrics-core"
+  // Prevent conflict with kryo-shaded used by spark (from :sdks:java:core testRuntimeClasspath)
+  exclude group: "com.esotericsoftware.kryo", module: "kryo"
 }
 
 configurations.validatesRunner {
@@ -321,6 +326,10 @@ tasks.register("validatesStructuredStreamingRunnerBatch", Test) {
   // Disable gradle cache
   outputs.upToDateWhen { false }
   systemProperties sparkTestProperties(["--runner":"SparkStructuredStreamingRunner", "--testMode":"true"])
+  // Register various other classes used in tests
+  systemProperty 'spark.kryo.classesToRegister',
+    'org.apache.beam.sdk.transforms.ViewTest$NonDeterministicStringCoder,' +
+    'org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.RegularImmutableList'
 
   classpath = configurations.validatesRunner
   testClassesDirs = files(
@@ -384,9 +393,6 @@ tasks.register("validatesRunner") {
   // Otherwise, it breaks Spark runner ValidatesRunner tests.
   //dependsOn validatesStructuredStreamingRunnerBatch
 }
-
-// Generates :runners:spark:*:runQuickstartJavaSpark task
-createJavaExamplesArchetypeValidationTask(type: 'Quickstart', runner: 'Spark')
 
 tasks.register("hadoopVersionsTest") {
   group = "Verification"
