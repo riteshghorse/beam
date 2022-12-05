@@ -17,9 +17,11 @@
 package timers
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/mtime"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 var (
@@ -56,7 +58,7 @@ type EventTimeTimer struct {
 	Kind TimeDomainEnum
 }
 
-func (t *EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+func (t EventTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
 	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
 }
 
@@ -72,22 +74,32 @@ func (e EventTimeTimer) TimerDomain() TimeDomainEnum {
 	return e.Kind
 }
 
-// type ProcessingTimeTimer struct {
-// 	timerSpec
-// }
+type ProcessingTimeTimer struct {
+	Key  string
+	Kind TimeDomainEnum
+}
 
-// func (e ProcessingTimeTimer) TimerKey() string {
-// 	return e.timerSpec.(timerInfo).key
-// }
+func (e ProcessingTimeTimer) TimerKey() string {
+	return e.Key
+}
 
-// func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
-// 	return e.timerSpec.(timerInfo).kind
-// }
+func (e ProcessingTimeTimer) TimerDomain() TimeDomainEnum {
+	return e.Kind
+}
+
+func (t ProcessingTimeTimer) Set(p Provider, FiringTimestamp mtime.Time) {
+	log.Infof(context.Background(), "setting timer in core/timer: %+v", t)
+	p.Set(TimerMap{Key: t.Key, FireTimestamp: FiringTimestamp})
+}
+
+func (t ProcessingTimeTimer) SetWithTag(p Provider, tag string, FiringTimestamp mtime.Time) {
+	p.Set(TimerMap{Key: t.Key, Tag: tag, FireTimestamp: FiringTimestamp})
+}
 
 func MakeEventTimeTimer(Key string) EventTimeTimer {
 	return EventTimeTimer{Key: Key, Kind: TimeDomainEventTime}
 }
 
-// func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
-// 	return ProcessingTimeTimer{timerInfo{key: Key, kind: TimeDomainProcessingTime}}
-// }
+func MakeProcessingTimeTimer(Key string) ProcessingTimeTimer {
+	return ProcessingTimeTimer{Key: Key, Kind: TimeDomainEventTime}
+}
