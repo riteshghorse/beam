@@ -701,6 +701,7 @@ func (w *dataWriter) writeTimers(p []byte) error {
 			},
 		},
 	}
+	log.Infof(context.Background(), "writing timers")
 	w.buf = w.buf[:0]
 	return w.send(msg)
 }

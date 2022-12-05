@@ -25,11 +25,12 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/graph/window"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/state"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/timers"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/io/pubsubio"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
@@ -39,10 +40,6 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/beamx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/debug"
 )
-
-func init() {
-	register.DoFn4x1[beam.EventTime, timers.Provider, string, int, string](&keyFn{})
-}
 
 var (
 	input = flag.String("input", os.ExpandEnv("$USER-wordcap"), "Pubsub input topic.")
@@ -56,13 +53,36 @@ var (
 	}
 )
 
-type keyFn struct {
-	BasicTimer timers.EventTimeTimer
+func init() {
+	register.DoFn6x3[context.Context, beam.EventTime, state.Provider, timers.Provider, int64, string, int64, string, error](&Stateful{})
 }
 
-func (k *keyFn) ProcessElement(ts beam.EventTime, t timers.Provider, w string, c int) string {
-	k.BasicTimer.Set(t, ts.Add(time.Second*2))
-	return fmt.Sprintf("%s-%d", w, c)
+type Stateful struct {
+	Val  state.Value[int]
+	Fire timers.EventTimeTimer
+}
+
+func (s *Stateful) ProcessElement(ctx context.Context, ts beam.EventTime, p state.Provider, tp timers.Provider, key int64, word string) (int64, string, error) {
+	log.Info(ctx, "stateful dofn invoked")
+	// Get the Value stored in our state
+	Val, ok, err := s.Val.Read(p)
+	if err != nil {
+		return key, word, err
+	}
+	if !ok {
+		s.Val.Write(p, 1)
+	} else {
+		s.Val.Write(p, Val+1)
+	}
+
+	if Val > 10000 {
+		// Example of clearing and starting again with an empty bag
+		s.Val.Clear(p)
+	}
+
+	s.Fire.Set(tp, ts.Add(time.Second*10))
+
+	return key, word, nil
 }
 
 func main() {
@@ -86,15 +106,17 @@ func main() {
 	s := p.Root()
 
 	col := pubsubio.Read(s, project, *input, &pubsubio.ReadOptions{Subscription: sub.ID()})
+	col = beam.WindowInto(s, window.NewFixedWindows(60*time.Second), col)
 	str := beam.ParDo(s, func(b []byte) string {
 		return (string)(b)
 	}, col)
-	cap := beam.ParDo(s, func(s string, emit func(string, int)) {
-		emit(s, 1)
+
+	keyed := beam.ParDo(s, func(s string) (int64, string) {
+		return int64(1), s
 	}, str)
 
-	cap = beam.ParDo(s, &keyFn{BasicTimer: timers.MakeEventTimeTimer("BasicTimer")}, cap)
-	debug.Print(s, cap)
+	timed := beam.ParDo(s, &Stateful{Val: state.MakeValueState[int]("key1"), Fire: timers.MakeEventTimeTimer("key2")}, keyed)
+	debug.Print(s, timed)
 
 	if err := beamx.Run(context.Background(), p); err != nil {
 		log.Exitf(ctx, "Failed to execute job: %v", err)
