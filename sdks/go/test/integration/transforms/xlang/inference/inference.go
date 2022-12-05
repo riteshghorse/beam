@@ -24,7 +24,6 @@ import (
 	_ "github.com/apache/beam/sdks/v2/go/pkg/beam/runners/universal"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/testing/passert"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/transforms/xlang/inference"
-	"github.com/apache/beam/sdks/v2/go/pkg/beam/x/debug"
 )
 
 func init() {
@@ -105,6 +104,7 @@ func RunInferenceWithKV(expansionAddr string) *beam.Pipeline {
 	outT := reflect.TypeOf(a)
 	// fmt.Print(ml.String())
 	outCol := inference.RunInferenceWithKV(s, modelLoader, input, outT, inference.WithKwarg(kwargs), inference.WithExpansionAddr(expansionAddr))
+	beam.DropKey(s, outCol)
 	// log.Infof(context.Background(), "%v", outCol.Coder().Type())
 	// outCol = beam.ParDo(s, func(ctx context.Context, a int64, row inference.PredictionResult) inference.PredictionResult {
 	// 	log.Infof(ctx, "key: %d, value: %v", a, row)
@@ -112,7 +112,7 @@ func RunInferenceWithKV(expansionAddr string) *beam.Pipeline {
 	// }, outCol)
 	// outCol := beam.ParDo(s, doPrediction, input)
 	// outCol = beam.ParDo(s, dropKeyFn, outCol)
-	debug.Print(s, outCol)
+	// debug.Print(s, outCol)
 	// passert.Equals(s, outCol, keyedOut)
 	return p
 }

@@ -43,12 +43,12 @@ func TestRunInference(t *testing.T) {
 	ptest.RunAndValidate(t, p)
 }
 
-// func TestRunInferenceWithKV(t *testing.T) {
-// 	integration.CheckFilters(t)
-// 	checkFlags(t)
-// 	p := RunInferenceWithKV(expansionAddr)
-// 	ptest.RunAndValidate(t, p)
-// }
+func TestRunInferenceWithKV(t *testing.T) {
+	integration.CheckFilters(t)
+	checkFlags(t)
+	p := RunInferenceWithKV(expansionAddr)
+	ptest.RunAndValidate(t, p)
+}
 
 func TestMain(m *testing.M) {
 	flag.Parse()
