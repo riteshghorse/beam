@@ -17,11 +17,13 @@ package harness
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/runtime/exec"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 	fnpb "github.com/apache/beam/sdks/v2/go/pkg/beam/model/fnexecution_v1"
@@ -66,7 +68,7 @@ func (s *ScopedDataManager) OpenWrite(ctx context.Context, id exec.StreamID) (io
 }
 
 // OpenTimerRead opens an io.ReadCloser on the given stream.
-func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (io.ReadCloser, error) {
+func (s *ScopedDataManager) OpenTimerRead(ctx context.Context, id exec.StreamID) (chan typex.Elements, error) {
 	ch, err := s.open(ctx, id.Port)
 	if err != nil {
 		return nil, err
@@ -177,6 +179,7 @@ type DataChannel struct {
 
 	writers map[instructionID]map[string]*dataWriter
 	readers map[instructionID]map[string]*dataReader
+	channel map[instructionID]map[string]chan typex.Elements
 
 	// recently terminated instructions
 	endedInstructions map[instructionID]struct{}
@@ -217,6 +220,7 @@ func makeDataChannel(ctx context.Context, id string, client dataClient, cancelFn
 		client:            client,
 		writers:           make(map[instructionID]map[string]*dataWriter),
 		readers:           make(map[instructionID]map[string]*dataReader),
+		channel:           make(map[instructionID]map[string]chan typex.Elements),
 		endedInstructions: make(map[instructionID]struct{}),
 		cancelFn:          cancelFn,
 	}
@@ -252,16 +256,16 @@ func (c *DataChannel) OpenWrite(ctx context.Context, ptransformID string, instID
 }
 
 // OpenTimerRead returns an io.ReadCloser of the data elements for the given instruction and ptransform.
-func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) io.ReadCloser {
-
+func (c *DataChannel) OpenTimerRead(ctx context.Context, ptransformID string, instID instructionID) chan typex.Elements {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cid := clientID{ptransformID: ptransformID, instID: instID}
 	if c.readErr != nil {
-		log.Errorf(ctx, "opening a reader %v on a closed channel", cid)
-		return &errReader{c.readErr}
+		panic(fmt.Errorf("opening a reader %v on a closed channel", cid))
+		// return &errReader{c.readErr}
 	}
-	return c.makeReader(ctx, cid)
+	return c.makeChannel(ctx, cid)
+	// return c.makeReader(ctx, cid)
 }
 
 // OpenWrite returns an io.WriteCloser of the data elements for the given instruction and ptransform.
@@ -271,7 +275,7 @@ func (c *DataChannel) OpenTimerWrite(ctx context.Context, ptransformID string, i
 }
 
 func (c *DataChannel) read(ctx context.Context) {
-	cache := make(map[clientID]*dataReader)
+	cache := make(map[clientID]chan typex.Elements)
 	for {
 		msg, err := c.client.Recv()
 		if err != nil {
@@ -282,15 +286,14 @@ func (c *DataChannel) read(ctx context.Context) {
 			// close the r.buf channels twice, or send on a closed channel.
 			// Any other approach is racy, and may cause one of the above
 			// panics.
-			for _, m := range c.readers {
+			for _, m := range c.channel {
 				for _, r := range m {
-					log.Errorf(ctx, "DataChannel.read %v reader %v closing due to error on channel", c.id, r.id)
-					if !r.completed {
-						r.completed = true
-						r.err = err
-						close(r.buf)
+					log.Errorf(ctx, "DataChannel.read %v  closing due to error on channel", c.id)
+					if r != nil {
+
+						close(r)
 					}
-					delete(cache, r.id)
+					// delete(cache, )
 				}
 			}
 			c.terminateStreamOnError(err)
@@ -313,88 +316,52 @@ func (c *DataChannel) read(ctx context.Context) {
 		for _, elm := range msg.GetData() {
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
 
-			var r *dataReader
+			var r chan typex.Elements
 			if local, ok := cache[id]; ok {
 				r = local
 			} else {
 				c.mu.Lock()
-				r = c.makeReader(ctx, id)
+				r = c.makeChannel(ctx, id)
 				c.mu.Unlock()
 				cache[id] = r
 			}
 
 			if elm.GetIsLast() {
-				// If this reader hasn't closed yet, do so now.
-				if !r.completed {
-					// Use the last segment if any.
-					if len(elm.GetData()) != 0 {
-						// In case of local side closing, send with select.
-						select {
-						case r.buf <- elm.GetData():
-						case <-r.done:
-						}
-					}
-					// Close buffer to signal EOF.
-					r.completed = true
-					close(r.buf)
+				if len(elm.GetData()) != 0 {
+					r <- typex.Elements{Data: elm.GetData()}
 				}
 
 				// Clean up local bookkeeping. We'll never see another message
 				// for it again. We have to be careful not to remove the real
 				// one, because readers may be initialized after we've seen
 				// the full stream.
-				delete(cache, id)
+				// delete(cache, id)
 				continue
 			}
-
-			if r.completed {
-				// The local reader has closed but the remote is still sending data.
-				// Just ignore it. We keep the reader config in the cache so we don't
-				// treat it as a new reader. Eventually the stream will finish and go
-				// through normal teardown.
-				continue
-			}
-
-			// This send is deliberately blocking, if we exceed the buffering for
-			// a reader. We can't buffer the entire main input, if some user code
-			// is slow (or gets stuck). If the local side closes, the reader
-			// will be marked as completed and further remote data will be ignored.
-			select {
-			case r.buf <- elm.GetData():
-			case <-r.done:
-				r.completed = true
-				close(r.buf)
-			}
+			r <- typex.Elements{Data: elm.GetData()}
 		}
 
 		for _, elm := range msg.GetTimers() {
 			log.Infof(ctx, "timers received: %#v", elm)
 			id := clientID{ptransformID: elm.TransformId, instID: instructionID(elm.GetInstructionId())}
-			var r *dataReader
+			var r chan typex.Elements
 			if local, ok := cache[id]; ok {
 				r = local
 			} else {
 				c.mu.Lock()
-				r = c.makeReader(ctx, id)
+				r = c.makeChannel(ctx, id)
 				c.mu.Unlock()
 				cache[id] = r
 			}
 
 			if elm.GetIsLast() {
-				// If this reader hasn't closed yet, do so now.
-				if !r.completed {
-					// Use the last segment if any.
-					if len(elm.GetTimers()) != 0 {
-						// In case of local side closing, send with select.
-						select {
-						case r.buf <- elm.GetTimers():
-						case <-r.done:
-						}
-					}
-					// Close buffer to signal EOF.
-					r.completed = true
-					close(r.buf)
+				// Use the last segment if any.
+				if len(elm.GetTimers()) != 0 {
+					// In case of local side closing, send with select.
+					r <- typex.Elements{Timers: elm.GetTimers()}
 				}
+
+				close(r)
 
 				// Clean up local bookkeeping. We'll never see another message
 				// for it again. We have to be careful not to remove the real
@@ -404,24 +371,11 @@ func (c *DataChannel) read(ctx context.Context) {
 				continue
 			}
 
-			if r.completed {
-				// The local reader has closed but the remote is still sending data.
-				// Just ignore it. We keep the reader config in the cache so we don't
-				// treat it as a new reader. Eventually the stream will finish and go
-				// through normal teardown.
-				continue
-			}
-
 			// This send is deliberately blocking, if we exceed the buffering for
 			// a reader. We can't buffer the entire main input, if some user code
 			// is slow (or gets stuck). If the local side closes, the reader
 			// will be marked as completed and further remote data will be ignored.
-			select {
-			case r.buf <- elm.GetTimers():
-			case <-r.done:
-				r.completed = true
-				close(r.buf)
-			}
+			r <- typex.Elements{Timers: elm.GetTimers()}
 		}
 	}
 }
@@ -436,6 +390,33 @@ func (r *errReader) Read(_ []byte) (int, error) {
 
 func (r *errReader) Close() error {
 	return r.err
+}
+
+// makeReader creates a dataReader. It expects to be called while c.mu is held.
+func (c *DataChannel) makeChannel(ctx context.Context, id clientID) chan typex.Elements {
+	var m map[string]chan typex.Elements
+	var ok bool
+	if m, ok = c.channel[id.instID]; !ok {
+		m = make(map[string]chan typex.Elements)
+		c.channel[id.instID] = m
+	}
+
+	if r, ok := m[id.ptransformID]; ok {
+		return r
+	}
+
+	// r := &dataReader{id: id, buf: make(chan []byte, bufElements), done: make(chan bool, 1), channel: c}
+	r := make(chan typex.Elements, 20)
+	// Just in case initial data for an instruction arrives *after* an instructon has ended.
+	// eg. it was blocked by another reader being slow, or the other instruction failed.
+	// So we provide a pre-completed reader, and do not cache it, as there's no further cleanup for it.
+	if _, ok := c.endedInstructions[id.instID]; ok {
+		close(r)
+		return r
+	}
+
+	m[id.ptransformID] = r
+	return r
 }
 
 // makeReader creates a dataReader. It expects to be called while c.mu is held.

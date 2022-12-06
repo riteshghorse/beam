@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/typex"
 )
 
 // Port represents the connection port of external operations.
@@ -69,7 +71,7 @@ type TimerManager interface {
 	// OpenTimerWrite
 	OpenTimerWrite(ctx context.Context, id StreamID, key string) (io.WriteCloser, error)
 	// OpenTimerRead opens a closable byte stream for reading.
-	OpenTimerRead(ctx context.Context, id StreamID) (io.ReadCloser, error)
+	OpenTimerRead(ctx context.Context, id StreamID) (chan typex.Elements, error)
 }
 
 // StateReader is the interface for reading side input data.
