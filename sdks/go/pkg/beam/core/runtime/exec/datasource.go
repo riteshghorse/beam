@@ -29,6 +29,7 @@ import (
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/sdf"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/core/util/ioutilx"
 	"github.com/apache/beam/sdks/v2/go/pkg/beam/internal/errors"
+	"github.com/apache/beam/sdks/v2/go/pkg/beam/log"
 )
 
 // DataSource is a Root execution unit.
@@ -108,7 +109,7 @@ func (n *DataSource) StartBundle(ctx context.Context, id string, data DataContex
 // It trusts the nested reader to return accurate byte information.
 type byteCountReader struct {
 	count  *int
-	reader io.ReadCloser
+	reader io.Reader
 }
 
 func (r *byteCountReader) Read(p []byte) (int, error) {
@@ -118,7 +119,7 @@ func (r *byteCountReader) Read(p []byte) (int, error) {
 }
 
 func (r *byteCountReader) Close() error {
-	return r.reader.Close()
+	return nil
 }
 
 func (r *byteCountReader) reset() int {
@@ -129,14 +130,14 @@ func (r *byteCountReader) reset() int {
 
 // Process opens the data source, reads and decodes data, kicking off element processing.
 func (n *DataSource) Process(ctx context.Context) error {
-	r, err := n.source.OpenRead(ctx, n.SID)
+	ch, err := n.timer.OpenTimerRead(ctx, n.SID)
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer close(ch)
 	n.PCol.resetSize() // initialize the size distribution for this bundle.
 	var byteCount int
-	bcr := byteCountReader{reader: r, count: &byteCount}
+	// bcr := byteCountReader{reader: r, count: &byteCount}
 
 	c := coder.SkipW(n.Coder)
 	wc := MakeWindowDecoder(n.Coder.Window)
@@ -159,39 +160,48 @@ func (n *DataSource) Process(ctx context.Context) error {
 		if n.incrementIndexAndCheckSplit() {
 			return nil
 		}
-		// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
-		ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return errors.Wrap(err, "source failed")
-		}
 
-		// Decode key or parallel element.
-		pe, err := cp.Decode(&bcr)
-		if err != nil {
-			return errors.Wrap(err, "source decode failed")
-		}
-		pe.Timestamp = t
-		pe.Windows = ws
-		pe.Pane = pn
+		elements := <-ch
+		if len(elements.Data) > 0 {
+			r := bytes.NewReader(elements.Data)
+			bcr := byteCountReader{reader: r, count: &byteCount}
 
-		var valReStreams []ReStream
-		for _, cv := range cvs {
-			values, err := n.makeReStream(ctx, cv, &bcr, len(cvs) == 1 && n.singleIterate)
+			// TODO(lostluck) 2020/02/22: Should we include window headers or just count the element sizes?
+			ws, t, pn, err := DecodeWindowedValueHeader(wc, r)
 			if err != nil {
+				if err == io.EOF {
+					return nil
+				}
+				return errors.Wrap(err, "source failed")
+			}
+
+			// Decode key or parallel element.
+			pe, err := cp.Decode(&bcr)
+			if err != nil {
+				return errors.Wrap(err, "source decode failed")
+			}
+			pe.Timestamp = t
+			pe.Windows = ws
+			pe.Pane = pn
+
+			var valReStreams []ReStream
+			for _, cv := range cvs {
+				values, err := n.makeReStream(ctx, cv, &bcr, len(cvs) == 1 && n.singleIterate)
+				if err != nil {
+					return err
+				}
+				valReStreams = append(valReStreams, values)
+			}
+
+			if err := n.Out.ProcessElement(ctx, pe, valReStreams...); err != nil {
 				return err
 			}
-			valReStreams = append(valReStreams, values)
+			// Collect the actual size of the element, and reset the bytecounter reader.
+			n.PCol.addSize(int64(bcr.reset()))
 		}
-
-		if err := n.Out.ProcessElement(ctx, pe, valReStreams...); err != nil {
-			return err
+		if len(elements.Timers) > 0 {
+			log.Debugf(ctx, "got timers here: %v", elements.Timers)
 		}
-		// Collect the actual size of the element, and reset the bytecounter reader.
-		n.PCol.addSize(int64(bcr.reset()))
-		bcr.reader = r
 	}
 }
 
