@@ -27,6 +27,8 @@ from typing import Optional
 from typing import Sequence
 from typing import Union
 
+import sys 
+import torch
 import tensorflow as tf
 import numpy
 from apache_beam.io.filesystems import FileSystems
@@ -40,7 +42,7 @@ __all__ = [
 ]
 
 TensorInferenceFn = Callable[
-    [Sequence[torch.Tensor], torch.nn.Module, str, Optional[Dict[str, Any]]],
+    [tf.Module, Sequence[numpy.ndarray], Optional[Dict[str, Any]]],
     Iterable[PredictionResult]]
 
 KeyedTensorInferenceFn = Callable[[
@@ -52,47 +54,22 @@ KeyedTensorInferenceFn = Callable[[
 Iterable[PredictionResult]]
 
 
-def _load_model(model_class: torch.nn.Module, state_dict_path, device, **model_params):
-  model = model_class(**model_params)
-
-  if device == torch.device('cuda') and not torch.cuda.is_available():
-    logging.warning(
-        "Model handler specified a 'GPU' device, but GPUs are not available. " \
-        "Switching to CPU.")
-    device = torch.device('cpu')
-
-  file = FileSystems.open(state_dict_path, 'rb')
-  try:
-    logging.info(
-        "Loading state_dict_path %s onto a %s device", state_dict_path, device)
-    state_dict = torch.load(file, map_location=device)
-  except RuntimeError as e:
-    if device == torch.device('cuda'):
-      message = "Loading the model onto a GPU device failed due to an " \
-        f"exception:\n{e}\nAttempting to load onto a CPU device instead."
-      logging.warning(message)
-      return _load_model(
-          model_class, state_dict_path, torch.device('cpu'), **model_params)
-    else:
-      raise e
-
-  model.load_state_dict(state_dict)
-  model.to(device)
-  model.eval()
-  logging.info("Finished loading PyTorch model.")
-  return (model, device)
+def _load_model(model_uri):
+  from tensorflow import keras
+  return keras.models.load_model(model_uri)
 
 
-def _convert_to_device(examples: torch.Tensor, device) -> torch.Tensor:
-  """
-  Converts samples to a style matching given device.
 
-  **NOTE:** A user may pass in device='GPU' but if GPU is not detected in the
-  environment it must be converted back to CPU.
-  """
-  if examples.device != device:
-    examples = examples.to(device)
-  return examples
+# def _convert_to_device(examples: torch.Tensor, device) -> torch.Tensor:
+#   """
+#   Converts samples to a style matching given device.
+
+#   **NOTE:** A user may pass in device='GPU' but if GPU is not detected in the
+#   environment it must be converted back to CPU.
+#   """
+#   if examples.device != device:
+#     examples = examples.to(device)
+#   return examples
 
 
 def _convert_to_result(
@@ -120,29 +97,29 @@ def default_tensor_inference_fn(
   return model.predict(vectorized_batch)
   
 
-def make_tensor_model_fn(model_fn: str) -> TensorInferenceFn:
-  """
-  Produces a TensorInferenceFn that uses a method of the model other that
-  the forward() method.
+# def make_tensor_model_fn(model_fn: str) -> TensorInferenceFn:
+#   """
+#   Produces a TensorInferenceFn that uses a method of the model other that
+#   the forward() method.
 
-  Args:
-    model_fn: A string name of the method to be used. This is accessed through
-      getattr(model, model_fn)
-  """
-  def attr_fn(
-      batch: Sequence[torch.Tensor],
-      model: torch.nn.Module,
-      device: str,
-      inference_args: Optional[Dict[str, Any]] = None
-  ) -> Iterable[PredictionResult]:
-    with torch.no_grad():
-      batched_tensors = torch.stack(batch)
-      batched_tensors = _convert_to_device(batched_tensors, device)
-      pred_fn = getattr(model, model_fn)
-      predictions = pred_fn(batched_tensors, **inference_args)
-      return _convert_to_result(batch, predictions)
+#   Args:
+#     model_fn: A string name of the method to be used. This is accessed through
+#       getattr(model, model_fn)
+#   """
+#   def attr_fn(
+#       batch: Sequence[torch.Tensor],
+#       model: torch.nn.Module,
+#       device: str,
+#       inference_args: Optional[Dict[str, Any]] = None
+#   ) -> Iterable[PredictionResult]:
+#     with torch.no_grad():
+#       batched_tensors = torch.stack(batch)
+#       batched_tensors = _convert_to_device(batched_tensors, device)
+#       pred_fn = getattr(model, model_fn)
+#       predictions = pred_fn(batched_tensors, **inference_args)
+#       return _convert_to_result(batch, predictions)
 
-  return attr_fn
+#   return attr_fn
 
 
 class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
@@ -215,12 +192,12 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
     predictions = self._inference_fn(model, batch, inference_args)
     return _convert_to_result(batch, predictions)
 
-  def get_num_bytes(self, batch: Sequence[torch.Tensor]) -> int:
+  def get_num_bytes(self, batch: Sequence[numpy.ndarray]) -> int:
     """
     Returns:
       The number of bytes of data for a batch of Tensors.
     """
-    return sum((el.element_size() for tensor in batch for el in tensor))
+    return sum(sys.getsizeof(element) for element in batch)
 
   def get_metrics_namespace(self) -> str:
     """
