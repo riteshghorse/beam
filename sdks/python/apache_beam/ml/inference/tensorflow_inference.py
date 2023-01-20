@@ -37,8 +37,7 @@ from apache_beam.ml.inference.base import PredictionResult
 from apache_beam.utils.annotations import experimental
 
 __all__ = [
-    'PytorchModelHandlerTensor',
-    'PytorchModelHandlerKeyedTensor',
+    'TFModelHandlerNumpy',
 ]
 
 TensorInferenceFn = Callable[
@@ -57,20 +56,6 @@ Iterable[PredictionResult]]
 def _load_model(model_uri):
   from tensorflow import keras
   return keras.models.load_model(model_uri)
-
-
-
-# def _convert_to_device(examples: torch.Tensor, device) -> torch.Tensor:
-#   """
-#   Converts samples to a style matching given device.
-
-#   **NOTE:** A user may pass in device='GPU' but if GPU is not detected in the
-#   environment it must be converted back to CPU.
-#   """
-#   if examples.device != device:
-#     examples = examples.to(device)
-#   return examples
-
 
 def _convert_to_result(
     batch: Iterable, predictions: Union[Iterable, Dict[Any, Iterable]]
@@ -95,31 +80,6 @@ def default_tensor_inference_fn(
     inference_args: Optional[Dict[str,Any]] = None) -> Iterable[PredictionResult]:
   vectorized_batch = numpy.stack(batch, axis=0)
   return model.predict(vectorized_batch)
-  
-
-# def make_tensor_model_fn(model_fn: str) -> TensorInferenceFn:
-#   """
-#   Produces a TensorInferenceFn that uses a method of the model other that
-#   the forward() method.
-
-#   Args:
-#     model_fn: A string name of the method to be used. This is accessed through
-#       getattr(model, model_fn)
-#   """
-#   def attr_fn(
-#       batch: Sequence[torch.Tensor],
-#       model: torch.nn.Module,
-#       device: str,
-#       inference_args: Optional[Dict[str, Any]] = None
-#   ) -> Iterable[PredictionResult]:
-#     with torch.no_grad():
-#       batched_tensors = torch.stack(batch)
-#       batched_tensors = _convert_to_device(batched_tensors, device)
-#       pred_fn = getattr(model, model_fn)
-#       predictions = pred_fn(batched_tensors, **inference_args)
-#       return _convert_to_result(batch, predictions)
-
-#   return attr_fn
 
 
 class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
@@ -131,30 +91,6 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
       device: str = 'CPU',
       *,
       inference_fn: TensorInferenceFn = default_tensor_inference_fn):
-    """Implementation of the ModelHandler interface for PyTorch.
-
-    Example Usage::
-
-      pcoll | RunInference(PytorchModelHandlerTensor(state_dict_path="my_uri"))
-
-    See https://pytorch.org/tutorials/beginner/saving_loading_models.html
-    for details
-
-    Args:
-      state_dict_path: path to the saved dictionary of the model state.
-      model_class: class of the Pytorch model that defines the model
-        structure.
-      model_params: A dictionary of arguments required to instantiate the model
-        class.
-      device: the device on which you wish to run the model. If
-        ``device = GPU`` then a GPU device will be used if it is available.
-        Otherwise, it will be CPU.
-      inference_fn: the inference function to use during RunInference.
-        default=_default_tensor_inference_fn
-
-    **Supported Versions:** RunInference APIs in Apache Beam have been tested
-    with PyTorch 1.9 and 1.10.
-    """
     self._model_uri = model_uri
     self._inference_fn = inference_fn
     self._device = device

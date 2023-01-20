@@ -39,37 +39,19 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 from apache_beam.runners.runner import PipelineResult
 
-
-def process_input(row) -> int:
-#   data = row.split(',')
-#   label, pixels = int(data[0]), data[1:]
-#   pixels = [int(pixel) for pixel in data]
-  return List[int(row)]
-
-
-class PostProcessor(beam.DoFn):
-  """Process the PredictionResult to get the predicted label.
-  Returns a comma separated string with true label and predicted label.
-  """
-  def process(self, element: PredictionResult) -> Iterable[str]:
-    label, prediction_result = element
-    prediction = prediction_result.inference
-    yield '{},{}'.format(label, prediction)
-
-
 def parse_known_args(argv):
   """Parses args for the workflow."""
   parser = argparse.ArgumentParser()
-  parser.add_argument(
-      '--input',
-      dest='input',
-      required=True,
-      help='text file with comma separated int values.')
   parser.add_argument(
       '--output',
       dest='output',
       required=True,
       help='Path to save output predictions.')
+  parser.add_argument(
+      '--model_path',
+      dest='model_path',
+      required=True,
+      help='Path to saved model.')
  
   return parser.parse_known_args(argv)
 
@@ -88,7 +70,7 @@ def run(
 
   # In this example we pass keyed inputs to RunInference transform.
   # Therefore, we use KeyedModelHandler wrapper over SklearnModelHandlerNumpy.
-  model_loader =  TFModelHandlerNumpy()
+  model_loader =  TFModelHandlerNumpy(known_args.model_path)
 
   pipeline = test_pipeline
   if not test_pipeline:
@@ -97,7 +79,6 @@ def run(
   label_pixel_tuple = (
       pipeline
       | "ReadFromInput" >> beam.Create([[1], [2], [3]]))
-    #   | "PreProcessInputs" >> beam.ParDo(process_input))
 
   predictions = (
       label_pixel_tuple
