@@ -147,8 +147,8 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
 
 
 def default_keyed_tensor_inference_fn(
-    batch: Sequence[Dict[str, torch.Tensor]],
-    model: torch.nn.Module,
+    batch: Sequence[Dict[str, numpy.ndarray]],
+    model: tf.Module,
     device: str,
     inference_args: Optional[Dict[str,
                                   Any]] = None) -> Iterable[PredictionResult]:
@@ -160,12 +160,12 @@ def default_keyed_tensor_inference_fn(
   # https://github.com/apache/beam/issues/22811
   with torch.no_grad():
     for example in batch:
-      for key, tensor in example.items():
-        key_to_tensor_list[key].append(tensor)
+      for key, value in example.items():
+        key_to_tensor_list[key].append(value)
     key_to_batched_tensors = {}
     for key in key_to_tensor_list:
-      batched_tensors = torch.stack(key_to_tensor_list[key])
-      batched_tensors = _convert_to_device(batched_tensors, device)
+      batched_tensors = numpy.stack(key_to_tensor_list[key])
+      # batched_tensors = _convert_to_device(batched_tensors, device)
       key_to_batched_tensors[key] = batched_tensors
     predictions = model(**key_to_batched_tensors, **inference_args)
 
@@ -210,77 +210,36 @@ def make_keyed_tensor_model_fn(model_fn: str) -> KeyedTensorInferenceFn:
 
 
 @experimental(extra_message="No backwards-compatibility guarantees.")
-class PytorchModelHandlerKeyedTensor(ModelHandler[Dict[str, torch.Tensor],
+class TFModelHandlerKeyedNumpy(ModelHandler[Dict[str, numpy.ndarray],
                                                   PredictionResult,
-                                                  torch.nn.Module]):
+                                                  tf.Module]):
   def __init__(
       self,
-      state_dict_path: str,
-      model_class: Callable[..., torch.nn.Module],
-      model_params: Dict[str, Any],
+      model_uri: str,
       device: str = 'CPU',
       *,
       inference_fn: KeyedTensorInferenceFn = default_keyed_tensor_inference_fn):
-    """Implementation of the ModelHandler interface for PyTorch.
-
-    Example Usage::
-
-      pcoll | RunInference(
-      PytorchModelHandlerKeyedTensor(state_dict_path="my_uri"))
-
-    **NOTE:** This API and its implementation are under development and
-    do not provide backward compatibility guarantees.
-
-    See https://pytorch.org/tutorials/beginner/saving_loading_models.html
-    for details
-
-    Args:
-      state_dict_path: path to the saved dictionary of the model state.
-      model_class: class of the Pytorch model that defines the model
-        structure.
-      model_params: A dictionary of arguments required to instantiate the model
-        class.
-      device: the device on which you wish to run the model. If
-        ``device = GPU`` then a GPU device will be used if it is available.
-        Otherwise, it will be CPU.
-      inference_fn: the function to invoke on run_inference.
-        default = default_keyed_tensor_inference_fn
-
-    **Supported Versions:** RunInference APIs in Apache Beam have been tested
-    with PyTorch 1.9 and 1.10.
+    """Implementation of the ModelHandler interface for TF.
     """
-    self._state_dict_path = state_dict_path
-    if device == 'GPU':
-      logging.info("Device is set to CUDA")
-      self._device = torch.device('cuda')
-    else:
-      logging.info("Device is set to CPU")
-      self._device = torch.device('cpu')
-    self._model_class = model_class
-    self._model_params = model_params
+    self._model_uri = model_uri
+    self._device = device
     self._inference_fn = inference_fn
 
-  def load_model(self) -> torch.nn.Module:
+  def load_model(self) -> tf.Module:
     """Loads and initializes a Pytorch model for processing."""
-    model, device = _load_model(
-        self._model_class,
-        self._state_dict_path,
-        self._device,
-        **self._model_params)
-    self._device = device
-    return model
+    return _load_model(self._model_uri)
 
   def run_inference(
       self,
-      batch: Sequence[Dict[str, torch.Tensor]],
-      model: torch.nn.Module,
+      batch: Sequence[Dict[str, numpy.ndarray]],
+      model: tf.Module,
       inference_args: Optional[Dict[str, Any]] = None
   ) -> Iterable[PredictionResult]:
     """
-    Runs inferences on a batch of Keyed Tensors and returns an Iterable of
-    Tensor Predictions.
+    Runs inferences on a batch of Keyed Numpy array and returns an Iterable of
+    numpy Predictions.
 
-    For the same key across all examples, this will stack all Tensors values
+    For the same key across all examples, this will stack all numpy array values
     in a vectorized format to optimize the inference call.
 
     Args:
