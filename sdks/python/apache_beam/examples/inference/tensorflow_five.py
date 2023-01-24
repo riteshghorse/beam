@@ -116,10 +116,10 @@ def run(
     pipeline = beam.Pipeline(options=pipeline_options)
 
   examples = numpy.array([200, 300, 400], dtype=numpy.float32)
-  tf_examples = tf.convert_to_tensor(examples, dtype=tf.float32)
+  # tf_examples = tf.convert_to_tensor(examples, dtype=tf.float32)
   label_pixel_tuple = (
       pipeline
-      | "ReadFromInput" >> beam.Create(tf_examples))
+      | "ReadFromInput" >> beam.Create(examples))
 
 
   predictions = (
