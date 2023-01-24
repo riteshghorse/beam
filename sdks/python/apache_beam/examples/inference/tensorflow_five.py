@@ -30,11 +30,14 @@ from typing import Iterable
 from typing import List
 from typing import Tuple
 
+import numpy 
+import tensorflow as tf
+
 import apache_beam as beam
 from apache_beam.ml.inference.base import KeyedModelHandler, ModelHandler
 from apache_beam.ml.inference.base import PredictionResult
 from apache_beam.ml.inference.base import RunInference
-from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy
+from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy, TFModelHandlerTensor
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 from apache_beam.runners.runner import PipelineResult
@@ -87,15 +90,36 @@ def run(
 
 #   _ = predictions | "WriteOutput" >> beam.io.WriteToText(
 #       known_args.output, shard_name_template='', append_trailing_newlines=True)
-  model_loader =  KeyedModelHandler(TFModelHandlerNumpy(known_args.model_path))
+  
+  # model_loader =  KeyedModelHandler(TFModelHandlerNumpy(known_args.model_path))
+
+  # pipeline = test_pipeline
+  # if not test_pipeline:
+  #   pipeline = beam.Pipeline(options=pipeline_options)
+
+  # label_pixel_tuple = (
+  #     pipeline
+  #     | "ReadFromInput" >> beam.Create([(1,[1]), (2,[2]), (3, [3])])) 
+
+
+  # predictions = (
+  #     label_pixel_tuple
+  #     | "RunInference" >> RunInference(model_loader))
+
+  # _ = predictions | "WriteOutput" >> beam.io.WriteToText(
+  #     known_args.output, shard_name_template='', append_trailing_newlines=True)
+
+  model_loader =  TFModelHandlerTensor(known_args.model_path)
 
   pipeline = test_pipeline
   if not test_pipeline:
     pipeline = beam.Pipeline(options=pipeline_options)
 
+  examples = numpy.array([200, 300, 400], dtype=numpy.float32)
+  tf_examples = tf.convert_to_tensor(examples, dtype=tf.float32)
   label_pixel_tuple = (
       pipeline
-      | "ReadFromInput" >> beam.Create([(1,[1]), (2,[2]), (3, [3])])) 
+      | "ReadFromInput" >> beam.Create(tf_examples))
 
 
   predictions = (
@@ -104,7 +128,6 @@ def run(
 
   _ = predictions | "WriteOutput" >> beam.io.WriteToText(
       known_args.output, shard_name_template='', append_trailing_newlines=True)
-
   result = pipeline.run()
   result.wait_until_finish()
   return result
