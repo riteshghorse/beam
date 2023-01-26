@@ -38,20 +38,12 @@ from apache_beam.utils.annotations import experimental
 
 __all__ = [
     'TFModelHandlerNumpy',
+    'TFModelHandlerTensor',
 ]
 
 TensorInferenceFn = Callable[
     [tf.Module, Sequence[numpy.ndarray], Optional[Dict[str, Any]]],
     Iterable[PredictionResult]]
-
-KeyedTensorInferenceFn = Callable[[
-    Sequence[Dict[str, torch.Tensor]],
-    torch.nn.Module,
-    str,
-    Optional[Dict[str, Any]]
-],
-Iterable[PredictionResult]]
-
 
 def _load_model(model_uri):
   from tensorflow import keras
@@ -74,7 +66,7 @@ def _convert_to_result(
   return [PredictionResult(x, y) for x, y in zip(batch, predictions)]
 
 
-def default_tensor_inference_fn(
+def default_numpy_inference_fn(
     model: tf.Module,
     batch: Sequence[numpy.ndarray],
     inference_args: Optional[Dict[str,Any]] = None) -> Iterable[PredictionResult]:
@@ -82,7 +74,76 @@ def default_tensor_inference_fn(
   return model.predict(vectorized_batch)
 
 
+def default_tensor_inference_fn(
+    model: tf.Module,
+    batch: Sequence[tf.Tensor],
+    inference_args: Optional[Dict[str,Any]] = None) -> Iterable[PredictionResult]:
+  vectorized_batch = tf.stack(batch, axis=0)
+  return model.predict(vectorized_batch)
+
 class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
+                                             PredictionResult,
+                                             tf.Module]):
+  def __init__(
+      self,
+      model_uri: str,
+      device: str = 'CPU',
+      *,
+      inference_fn: TensorInferenceFn = default_numpy_inference_fn):
+    self._model_uri = model_uri
+    self._inference_fn = inference_fn
+    self._device = device
+
+  def load_model(self) -> tf.Module:
+    """Loads and initializes a Tensorflow model for processing."""
+    return _load_model(self._model_uri)
+
+  def run_inference(
+      self,
+      batch: Sequence[numpy.ndarray],
+      model: tf.Module,
+      inference_args: Optional[Dict[str, Any]] = None
+  ) -> Iterable[PredictionResult]:
+    """
+    Runs inferences on a batch of numpy array and returns an Iterable of
+    numpy array Predictions.
+
+    This method stacks the n-dimensional np-array in a vectorized format to optimize
+    the inference call.
+
+    Args:
+      batch: A sequence of numpy nd-array. These should be batchable, as this
+        method will call `numpy.stack()` and pass in batched numpy nd-array with
+        dimensions (batch_size, n_features, etc.) into the model's forward()
+        function.
+      model: A TF model.
+      inference_args: any additional arguments for an inference.
+
+    Returns:
+      An Iterable of type PredictionResult.
+    """
+    predictions = self._inference_fn(model, batch, inference_args)
+    return _convert_to_result(batch, predictions)
+
+  def get_num_bytes(self, batch: Sequence[numpy.ndarray]) -> int:
+    """
+    Returns:
+      The number of bytes of data for a batch of numpy arrays.
+    """
+    return sum(sys.getsizeof(element) for element in batch)
+
+  def get_metrics_namespace(self) -> str:
+    """
+    Returns:
+       A namespace for metrics collected by the RunInference transform.
+    """
+    return 'BeamML_TF_Numpy'
+
+  def validate_inference_args(self, inference_args: Optional[Dict[str, Any]]):
+    pass
+
+
+class TFModelHandlerTensor(ModelHandler[tf.Tensor,
                                              PredictionResult,
                                              tf.Module]):
   def __init__(
@@ -96,39 +157,36 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
     self._device = device
 
   def load_model(self) -> tf.Module:
-    """Loads and initializes a Pytorch model for processing."""
+    """Loads and initializes a tensorflow model for processing."""
     return _load_model(self._model_uri)
 
   def run_inference(
       self,
-      batch: Sequence[numpy.ndarray],
+      batch: Sequence[tf.Tensor],
       model: tf.Module,
       inference_args: Optional[Dict[str, Any]] = None
   ) -> Iterable[PredictionResult]:
     """
-    Runs inferences on a batch of Tensors and returns an Iterable of
+    Runs inferences on a batch of tf.Tensor and returns an Iterable of
     Tensor Predictions.
-
     This method stacks the list of Tensors in a vectorized format to optimize
     the inference call.
-
     Args:
       batch: A sequence of Tensors. These Tensors should be batchable, as this
-        method will call `torch.stack()` and pass in batched Tensors with
+        method will call `tf.stack()` and pass in batched Tensors with
         dimensions (batch_size, n_features, etc.) into the model's forward()
         function.
-      model: A PyTorch model.
+      model: A Tensorflow model.
       inference_args: Non-batchable arguments required as inputs to the model's
         forward() function. Unlike Tensors in `batch`, these parameters will
         not be dynamically batched
-
     Returns:
       An Iterable of type PredictionResult.
     """
     predictions = self._inference_fn(model, batch, inference_args)
     return _convert_to_result(batch, predictions)
 
-  def get_num_bytes(self, batch: Sequence[numpy.ndarray]) -> int:
+  def get_num_bytes(self, batch: Sequence[tf.Tensor]) -> int:
     """
     Returns:
       The number of bytes of data for a batch of Tensors.
@@ -140,9 +198,7 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
     Returns:
        A namespace for metrics collected by the RunInference transform.
     """
-    return 'BeamML_PyTorch'
+    return 'BeamML_TF_Tensors'
 
   def validate_inference_args(self, inference_args: Optional[Dict[str, Any]]):
     pass
-
-
