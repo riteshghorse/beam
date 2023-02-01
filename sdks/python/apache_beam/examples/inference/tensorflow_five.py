@@ -75,34 +75,17 @@ def run(
 
   # In this example we pass keyed inputs to RunInference transform.
   # Therefore, we use KeyedModelHandler wrapper over SklearnModelHandlerNumpy.
-  model_loader =  TFModelHandlerNumpy(known_args.model_path)
-
-  pipeline = test_pipeline
-  if not test_pipeline:
-    pipeline = beam.Pipeline(options=pipeline_options)
-
-  input_col = numpy.array([100, 200, 300])
-  # input_tf = tf.convert_to_tensor(input_col, dtype=tf.float32)
-  label_pixel_tuple = (
-      pipeline
-      | "ReadFromInput" >> beam.Create(input_col))
-
-  predictions = (
-      label_pixel_tuple
-      | "RunInference" >> RunInference(model_loader))
-
-  _ = predictions | "WriteOutput" >> beam.io.WriteToText(
-      known_args.output, shard_name_template='', append_trailing_newlines=True)
-  # model_loader =  KeyedModelHandler(TFModelHandlerNumpy(known_args.model_path))
+  # model_loader =  TFModelHandlerNumpy(known_args.model_path)
 
   # pipeline = test_pipeline
   # if not test_pipeline:
   #   pipeline = beam.Pipeline(options=pipeline_options)
 
+  # input_col = numpy.array([100, 200, 300])
+  # # input_tf = tf.convert_to_tensor(input_col, dtype=tf.float32)
   # label_pixel_tuple = (
   #     pipeline
-  #     | "ReadFromInput" >> beam.Create([(1,[1]), (2,[2]), (3, [3])])) 
-
+  #     | "ReadFromInput" >> beam.Create(input_col))
 
   # predictions = (
   #     label_pixel_tuple
@@ -110,6 +93,28 @@ def run(
 
   # _ = predictions | "WriteOutput" >> beam.io.WriteToText(
   #     known_args.output, shard_name_template='', append_trailing_newlines=True)
+  model_loader =  KeyedModelHandler(TFModelHandlerNumpy(known_args.model_path))
+
+  pipeline = test_pipeline
+  if not test_pipeline:
+    pipeline = beam.Pipeline(options=pipeline_options)
+
+  batched_examples = [
+      ('k1', numpy.array([1], dtype=numpy.int64)),
+      ('k2', numpy.array([10], dtype=numpy.int64)),
+      ('k3', numpy.array([100], dtype=numpy.int64)),
+  ]
+  label_pixel_tuple = (
+      pipeline
+      | "ReadFromInput" >> beam.Create(batched_examples))
+
+
+  predictions = (
+      label_pixel_tuple
+      | "RunInference" >> RunInference(model_loader))
+
+  _ = predictions | "WriteOutput" >> beam.io.WriteToText(
+      known_args.output, shard_name_template='', append_trailing_newlines=True)
 
   result = pipeline.run()
   result.wait_until_finish()

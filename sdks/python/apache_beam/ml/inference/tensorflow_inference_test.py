@@ -26,7 +26,7 @@ import numpy
 import tensorflow as tf
 
 
-from apache_beam.ml.inference.base import PredictionResult
+from apache_beam.ml.inference.base import KeyedModelHandler, PredictionResult
 from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy, TFModelHandlerTensor
 
 class FakeTFNumpyModel:
@@ -73,12 +73,39 @@ class TFRunInferenceTest(unittest.TestCase):
     ]
     
     inferences = inference_runner.run_inference(batched_examples, fake_model)
-    print(inferences)
     for actual, expected in zip(inferences, expected_predictions):
       self.assertTrue(_compare_tensor_prediction_result(actual, expected))
     
     
-    
+  def test_predict_keyed_numpy(self):
+    fake_model = FakeTFNumpyModel()
+    inference_runner = KeyedModelHandler(TFModelHandlerNumpy(model_uri='unused'))
+    batched_examples = [
+      ('k1', numpy.array([1], dtype=numpy.int64)),
+      ('k2', numpy.array([10], dtype=numpy.int64)),
+      ('k3', numpy.array([100], dtype=numpy.int64)),
+    ]
+    expected_predictions = [
+        (ex[0],PredictionResult(ex[1], pred)) for ex, pred in zip(batched_examples, [numpy.multiply(n[1], 10) for n in batched_examples])
+    ]
+    inferences = inference_runner.run_inference(batched_examples, fake_model)
+    for actual, expected in zip(inferences, expected_predictions):
+      self.assertTrue(compare_prediction_result(actual[1], expected[1]))
+  
+  def test_predict_keyed_tensor(self):
+    fake_model = FakeTFTensorModel()
+    inference_runner = KeyedModelHandler(TFModelHandlerTensor(model_uri='unused'))
+    batched_examples = [
+      ('k1', tf.convert_to_tensor(numpy.array([1]))),
+      ('k2', tf.convert_to_tensor(numpy.array([10]))),
+      ('k3', tf.convert_to_tensor(numpy.array([100]))),
+    ]
+    expected_predictions = [
+        (ex[0],PredictionResult(ex[1], pred)) for ex, pred in zip(batched_examples, [tf.math.multiply(n[1], 10) for n in batched_examples])
+    ]
+    inferences = inference_runner.run_inference(batched_examples, fake_model)
+    for actual, expected in zip(inferences, expected_predictions):
+      self.assertTrue(_compare_tensor_prediction_result(actual[1], expected[1]))
     
 if __name__ == '__main__':
   unittest.main()
