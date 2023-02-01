@@ -23,14 +23,25 @@ from apache_beam.ml.inference.sklearn_inference_test import compare_prediction_r
 
 
 import numpy
+import tensorflow as tf
 
 
 from apache_beam.ml.inference.base import PredictionResult
-from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy
+from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy, TFModelHandlerTensor
 
 class FakeTFNumpyModel:
     def predict(self, input: numpy.ndarray):
       return numpy.multiply(input, 10)
+
+
+class FakeTFTensorModel:
+  def predict(self, input: tf.Tensor):
+    return tf.math.multiply(input, 10)
+  
+
+def _compare_tensor_prediction_result(x, y):
+  return tf.math.equal(x.inference, y.inference)
+
 
 class TFRunInferenceTest(unittest.TestCase):
   def test_predict_numpy(self):
@@ -48,6 +59,23 @@ class TFRunInferenceTest(unittest.TestCase):
     for actual, expected in zip(inferences, expected_predictions):
       self.assertTrue(compare_prediction_result(actual, expected))
     
+  
+  def test_predict_tensor(self):
+    fake_model = FakeTFTensorModel()
+    inference_runner = TFModelHandlerTensor(model_uri='unused')
+    batched_examples = [
+        tf.convert_to_tensor(numpy.array([1])),
+        tf.convert_to_tensor(numpy.array([10])),
+        tf.convert_to_tensor(numpy.array([100])),          
+    ]
+    expected_predictions = [
+        PredictionResult(ex, pred) for ex, pred in zip(batched_examples, [tf.math.multiply(n, 10) for n in batched_examples])
+    ]
+    
+    inferences = inference_runner.run_inference(batched_examples, fake_model)
+    print(inferences)
+    for actual, expected in zip(inferences, expected_predictions):
+      self.assertTrue(_compare_tensor_prediction_result(actual, expected))
     
     
     
