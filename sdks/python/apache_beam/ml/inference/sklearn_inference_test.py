@@ -53,7 +53,7 @@ from apache_beam.testing.util import assert_that
 from apache_beam.testing.util import equal_to
 
 
-def _compare_prediction_result(a, b):
+def compare_prediction_result(a, b):
   example_equal = numpy.array_equal(a.example, b.example)
   if isinstance(a.inference, dict):
     return all(
