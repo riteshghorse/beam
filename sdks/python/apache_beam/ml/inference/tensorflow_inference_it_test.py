@@ -17,6 +17,7 @@
 
 """End-to-End test for Tensorflow Inference"""
 
+from cgi import test
 from typing import Tuple
 import logging
 from typing import List
@@ -24,9 +25,13 @@ import unittest
 import uuid
 
 
+import pytest
+
 import apache_beam as beam
+from apache_beam.examples.inference import tensorflow_mnist_classification
 from apache_beam.examples.inference.sklearn_japanese_housing_regression import parse_known_args
 from apache_beam.examples.inference.sklearn_mnist_classification import PostProcessor
+from apache_beam.io.filesystems import FileSystems
 from apache_beam.ml.inference.base import KeyedModelHandler, RunInference
 from apache_beam.ml.inference.sklearn_inference import ModelFileType, SklearnModelHandlerNumpy
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
@@ -34,52 +39,23 @@ from apache_beam.runners.runner import PipelineResult
 
 from apache_beam.testing.test_pipeline import TestPipeline
 
+
+
+def process_outputs(filepath):
+  with FileSystems().open(filepath) as f:
+    lines = f.readlines()
+  lines = [l.decode('utf-8').strip('\n') for l in lines]
+  return lines
+
+
+@pytest.mark.it_postcommit
 class TensorflowInference(unittest.TestCase):
   def process_input(self, row: str) -> Tuple[int, List[int]]:
     data = row.split(',')
     label, pixels = int(data[0]), data[1:]
     pixels = [int(pixel) for pixel in pixels]
     return label, pixels
-
-  def _run(self,
-      argv=None, save_main_session=True, test_pipeline=None) -> PipelineResult:
-    """
-    Args:
-      argv: Command line arguments defined for this example.
-      save_main_session: Used for internal testing.
-      test_pipeline: Used for internal testing.
-    """
-    known_args, pipeline_args = parse_known_args(argv)
-    pipeline_options = PipelineOptions(pipeline_args)
-    pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
-
-    # In this example we pass keyed inputs to RunInference transform.
-    # Therefore, we use KeyedModelHandler wrapper over SklearnModelHandlerNumpy.
-    model_loader = KeyedModelHandler(
-        SklearnModelHandlerNumpy(
-            model_file_type=ModelFileType.PICKLE,
-            model_uri=known_args.model_path))
-
-    pipeline = test_pipeline
-    if not test_pipeline:
-      pipeline = beam.Pipeline(options=pipeline_options)
-
-    label_pixel_tuple = (
-        pipeline
-        | "ReadFromInput" >> beam.io.ReadFromText(known_args.input)
-        | "PreProcessInputs" >> beam.Map(self.process_input))
-
-    predictions = (
-        label_pixel_tuple
-        | "RunInference" >> RunInference(model_loader)
-        | "PostProcessOutputs" >> beam.ParDo(PostProcessor()))
-
-    _ = predictions | "WriteOutput" >> beam.io.WriteToText(
-        known_args.output, shard_name_template='', append_trailing_newlines=True)
-
-    result = pipeline.run()
-    result.wait_until_finish()
-    return result
+  
       
   def test_sklearn_mnist_classification(self):
     test_pipeline = TestPipeline(is_integration_test=True)
@@ -92,6 +68,25 @@ class TensorflowInference(unittest.TestCase):
         'output': output_file,
         'model_path': model_path,
     }
+    tensorflow_mnist_classification.run(
+        test_pipeline.get_full_options_as_args(**extra_opts),
+        save_main_session=False)
+    self.assertEqual(FileSystems().exists(output_file), True)
+    
+    expected_output_filepath = 'gs://apache-beam-ml/testing/expected_outputs/test_tf_numpy_mnist_classification_actuals.txt'  # pylint: disable=line-too-long
+    expected_outputs = process_outputs(expected_output_filepath)
+
+    predicted_outputs = process_outputs(output_file)
+    self.assertEqual(len(expected_outputs), len(predicted_outputs))
+
+    predictions_dict = {}
+    for i in range(len(predicted_outputs)):
+      true_label, prediction = predicted_outputs[i].split(',')
+      predictions_dict[true_label] = prediction
+
+    for i in range(len(expected_outputs)):
+      true_label, expected_prediction = expected_outputs[i].split(',')
+      self.assertEqual(predictions_dict[true_label], expected_prediction)
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.DEBUG)
