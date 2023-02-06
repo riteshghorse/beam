@@ -28,7 +28,6 @@ from typing import Sequence
 from typing import Union
 
 import sys 
-import torch
 import tensorflow as tf
 import numpy
 from apache_beam.io.filesystems import FileSystems
@@ -46,8 +45,7 @@ TensorInferenceFn = Callable[
     Iterable[PredictionResult]]
 
 def _load_model(model_uri):
-  from tensorflow import keras
-  return keras.models.load_model(model_uri)
+  return tf.keras.models.load_model(model_uri)
 
 def _convert_to_result(
     batch: Iterable, predictions: Union[Iterable, Dict[Any, Iterable]]

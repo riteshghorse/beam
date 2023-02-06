@@ -29,16 +29,9 @@ import pytest
 
 import apache_beam as beam
 from apache_beam.examples.inference import tensorflow_mnist_classification
-from apache_beam.examples.inference.sklearn_japanese_housing_regression import parse_known_args
-from apache_beam.examples.inference.sklearn_mnist_classification import PostProcessor
 from apache_beam.io.filesystems import FileSystems
-from apache_beam.ml.inference.base import KeyedModelHandler, RunInference
-from apache_beam.ml.inference.sklearn_inference import ModelFileType, SklearnModelHandlerNumpy
-from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
-from apache_beam.runners.runner import PipelineResult
 
 from apache_beam.testing.test_pipeline import TestPipeline
-
 
 
 def process_outputs(filepath):
@@ -59,10 +52,10 @@ class TensorflowInference(unittest.TestCase):
       
   def test_sklearn_mnist_classification(self):
     test_pipeline = TestPipeline(is_integration_test=True)
-    input_file = 'gs://apache-beam-ml/testing/inputs/it_mnist_data.csv'
+    input_file = 'gs://clouddfe-riteshghorse/tf/mnist/dataset/testing_inputs_it_mnist_data.csv'
     output_file_dir = 'gs://temp-storage-for-end-to-end-tests'
     output_file = '/'.join([output_file_dir, str(uuid.uuid4()), 'result.txt'])
-    model_path = ''
+    model_path = 'gs://clouddfe-riteshghorse/tf/mnist/model/'
     extra_opts = {
         'input': input_file,
         'output': output_file,
