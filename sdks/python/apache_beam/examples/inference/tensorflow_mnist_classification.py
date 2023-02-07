@@ -20,6 +20,8 @@ import argparse
 import logging
 from typing import Iterable, List, Tuple
 
+import numpy
+
 import apache_beam as beam
 from apache_beam.ml.inference.base import KeyedModelHandler, PredictionResult, RunInference
 from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy
@@ -28,10 +30,11 @@ from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
 from apache_beam.runners.runner import PipelineResult
 
 
-def process_input(row: str) -> Tuple[int, List[int]]:
+def process_input(row: str) -> Tuple[int, numpy.ndarray]:
   data = row.split(',')
   label, pixels = int(data[0]), data[1:]
   pixels = [int(pixel) for pixel in pixels]
+  pixels = numpy.array(pixels).reshape(28, 28, 1)
   return label, pixels
 
 
@@ -41,7 +44,7 @@ class PostProcessor(beam.DoFn):
   """
   def process(self, element: Tuple[int, PredictionResult]) -> Iterable[str]:
     label, prediction_result = element
-    prediction = prediction_result.inference
+    prediction = numpy.argmax(prediction_result.inference, axis=0)
     yield '{},{}'.format(label, prediction)
 
 def parse_known_args(argv):
@@ -78,7 +81,7 @@ def run(
   pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
 
   # In this example we pass keyed inputs to RunInference transform.
-  # Therefore, we use KeyedModelHandler wrapper over SklearnModelHandlerNumpy.
+  # Therefore, we use KeyedModelHandler wrapper over TFModelHandlerNumpy.
   model_loader = KeyedModelHandler(
       TFModelHandlerNumpy(model_uri=known_args.model_path))
 

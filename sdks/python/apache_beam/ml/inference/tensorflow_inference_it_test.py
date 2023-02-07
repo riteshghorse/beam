@@ -41,7 +41,6 @@ def process_outputs(filepath):
   return lines
 
 
-@pytest.mark.it_postcommit
 class TensorflowInference(unittest.TestCase):
   def process_input(self, row: str) -> Tuple[int, List[int]]:
     data = row.split(',')
@@ -50,10 +49,10 @@ class TensorflowInference(unittest.TestCase):
     return label, pixels
   
       
-  def test_sklearn_mnist_classification(self):
+  def test_tf_mnist_classification(self):
     test_pipeline = TestPipeline(is_integration_test=True)
     input_file = 'gs://clouddfe-riteshghorse/tf/mnist/dataset/testing_inputs_it_mnist_data.csv'
-    output_file_dir = 'gs://temp-storage-for-end-to-end-tests'
+    output_file_dir = 'gs://clouddfe-riteshghorse/tf/mnist/output/'
     output_file = '/'.join([output_file_dir, str(uuid.uuid4()), 'result.txt'])
     model_path = 'gs://clouddfe-riteshghorse/tf/mnist/model/'
     extra_opts = {
@@ -66,7 +65,7 @@ class TensorflowInference(unittest.TestCase):
         save_main_session=False)
     self.assertEqual(FileSystems().exists(output_file), True)
     
-    expected_output_filepath = 'gs://apache-beam-ml/testing/expected_outputs/test_tf_numpy_mnist_classification_actuals.txt'  # pylint: disable=line-too-long
+    expected_output_filepath = 'gs://clouddfe-riteshghorse/tf/mnist/output/testing_expected_outputs_test_sklearn_mnist_classification_actuals.txt'  # pylint: disable=line-too-long
     expected_outputs = process_outputs(expected_output_filepath)
 
     predicted_outputs = process_outputs(output_file)
