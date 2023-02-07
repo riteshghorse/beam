@@ -27,7 +27,8 @@ from typing import Optional
 from typing import Sequence
 from typing import Union
 
-import sys 
+import sys
+from apache_beam.ml.inference import utils 
 import tensorflow as tf
 import numpy
 from apache_beam.io.filesystems import FileSystems
@@ -41,43 +42,29 @@ __all__ = [
 ]
 
 TensorInferenceFn = Callable[
-    [tf.Module, Sequence[numpy.ndarray], Optional[Dict[str, Any]]],
+    [tf.Module, Sequence[numpy.ndarray], Optional[Dict[str, Any]], Optional[str]],
     Iterable[PredictionResult]]
 
 def _load_model(model_uri):
   return tf.keras.models.load_model(model_uri)
 
-def _convert_to_result(
-    batch: Iterable, predictions: Union[Iterable, Dict[Any, Iterable]]
-) -> Iterable[PredictionResult]:
-  if isinstance(predictions, dict):
-    # Go from one dictionary of type: {key_type1: Iterable<val_type1>,
-    # key_type2: Iterable<val_type2>, ...} where each Iterable is of
-    # length batch_size, to a list of dictionaries:
-    # [{key_type1: value_type1, key_type2: value_type2}]
-    predictions_per_tensor = [
-        dict(zip(predictions.keys(), v)) for v in zip(*predictions.values())
-    ]
-    return [
-        PredictionResult(x, y) for x, y in zip(batch, predictions_per_tensor)
-    ]
-  return [PredictionResult(x, y) for x, y in zip(batch, predictions)]
-
 
 def default_numpy_inference_fn(
     model: tf.Module,
     batch: Sequence[numpy.ndarray],
-    inference_args: Optional[Dict[str,Any]] = None) -> Iterable[PredictionResult]:
+    inference_args: Optional[Dict[str,Any]] = None,
+    model_id: Optional[str] = None) -> Iterable[PredictionResult]:
   vectorized_batch = numpy.stack(batch, axis=0)
-  return model.predict(vectorized_batch)
+  return  utils._convert_to_result(batch, model.predict(vectorized_batch), model_id)
 
 
 def default_tensor_inference_fn(
     model: tf.Module,
     batch: Sequence[tf.Tensor],
-    inference_args: Optional[Dict[str,Any]] = None) -> Iterable[PredictionResult]:
+    inference_args: Optional[Dict[str,Any]] = None,
+    model_id: Optional[str] = None) -> Iterable[PredictionResult]:
   vectorized_batch = tf.stack(batch, axis=0)
-  return model.predict(vectorized_batch)
+  return utils._convert_to_result(batch, model.predict(vectorized_batch), model_id)
 
 class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
                                              PredictionResult,
@@ -85,17 +72,18 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
   def __init__(
       self,
       model_uri: str,
-      device: str = 'CPU',
       *,
       inference_fn: TensorInferenceFn = default_numpy_inference_fn):
     self._model_uri = model_uri
     self._inference_fn = inference_fn
-    self._device = device
 
   def load_model(self) -> tf.Module:
     """Loads and initializes a Tensorflow model for processing."""
     return _load_model(self._model_uri)
 
+  def update_model_path(self, model_path: Optional[str] = None):
+    self._model_uri = model_path if model_path else self._model_uri
+    
   def run_inference(
       self,
       batch: Sequence[numpy.ndarray],
@@ -120,8 +108,7 @@ class TFModelHandlerNumpy(ModelHandler[numpy.ndarray,
     Returns:
       An Iterable of type PredictionResult.
     """
-    predictions = self._inference_fn(model, batch, inference_args)
-    return _convert_to_result(batch, predictions)
+    return self._inference_fn(model, batch, inference_args, self._model_uri)
 
   def get_num_bytes(self, batch: Sequence[numpy.ndarray]) -> int:
     """
@@ -147,22 +134,23 @@ class TFModelHandlerTensor(ModelHandler[tf.Tensor,
   def __init__(
       self,
       model_uri: str,
-      device: str = 'CPU',
       *,
       inference_fn: TensorInferenceFn = default_tensor_inference_fn):
     self._model_uri = model_uri
     self._inference_fn = inference_fn
-    self._device = device
 
   def load_model(self) -> tf.Module:
     """Loads and initializes a tensorflow model for processing."""
     return _load_model(self._model_uri)
 
+  def update_model_path(self, model_path: Optional[str] = None):
+    self._model_uri = model_path if model_path else self._model_uri
+    
   def run_inference(
       self,
       batch: Sequence[tf.Tensor],
       model: tf.Module,
-      inference_args: Optional[Dict[str, Any]] = None
+      inference_args: Optional[Dict[str, Any]] = None,
   ) -> Iterable[PredictionResult]:
     """
     Runs inferences on a batch of tf.Tensor and returns an Iterable of
@@ -181,8 +169,7 @@ class TFModelHandlerTensor(ModelHandler[tf.Tensor,
     Returns:
       An Iterable of type PredictionResult.
     """
-    predictions = self._inference_fn(model, batch, inference_args)
-    return _convert_to_result(batch, predictions)
+    return self._inference_fn(model, batch, inference_args, self._model_uri)
 
   def get_num_bytes(self, batch: Sequence[tf.Tensor]) -> int:
     """
