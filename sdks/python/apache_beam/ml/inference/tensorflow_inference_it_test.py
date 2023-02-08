@@ -19,9 +19,6 @@
 
 import logging
 
-from typing import Tuple
-from typing import List
-
 import pytest
 import unittest
 import uuid
@@ -53,9 +50,9 @@ class TensorflowInference(unittest.TestCase):
   def test_tf_mnist_classification(self):
     test_pipeline = TestPipeline(is_integration_test=True)
     input_file = 'gs://clouddfe-riteshghorse/tf/mnist/dataset/testing_inputs_it_mnist_data.csv'  # pylint: disable=line-too-long
-    output_file_dir = 'gs://clouddfe-riteshghorse/tf/mnist/output/'
+    output_file_dir = 'gs://clouddfe-riteshghorse/tf/mnist/output_NOW/'
     output_file = '/'.join([output_file_dir, str(uuid.uuid4()), 'result.txt'])
-    model_path = 'gs://clouddfe-riteshghorse/tf/mnist/model/'
+    model_path = 'gs://clouddfe-riteshghorse/tf/mnist/weights/'
     extra_opts = {
         'input': input_file,
         'output': output_file,

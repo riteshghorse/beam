@@ -20,10 +20,11 @@ import logging
 from typing import Iterable, Tuple
 
 import numpy
+import tensorflow as tf
 
 import apache_beam as beam
 from apache_beam.ml.inference.base import KeyedModelHandler, PredictionResult, RunInference
-from apache_beam.ml.inference.tensorflow_inference import TFModelHandlerNumpy
+from apache_beam.ml.inference.tensorflow_inference import ModelType, TFModelHandlerNumpy
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
 from apache_beam.runners.runner import PipelineResult
 
@@ -68,6 +69,21 @@ def parse_known_args(argv):
   return parser.parse_known_args(argv)
 
 
+def get_model():
+  inputs = tf.keras.layers.Input(shape=(28, 28, 1))
+  x = tf.keras.layers.Conv2D(32, 3, activation="relu")(inputs)
+  x = tf.keras.layers.Conv2D(32, 3, activation="relu")(x)
+  x = tf.keras.layers.MaxPooling2D(2)(x)
+  x = tf.keras.layers.Conv2D(64, 3, activation="relu")(x)
+  x = tf.keras.layers.Conv2D(64, 3, activation="relu")(x)
+  x = tf.keras.layers.MaxPooling2D(2)(x)
+  x = tf.keras.layers.Flatten()(x)
+  x = tf.keras.layers.Dropout(0.2)(x)
+  outputs = tf.keras.layers.Dense(10, activation='softmax')(x)
+  model = tf.keras.Model(inputs, outputs)
+  return model
+
+
 def run(
     argv=None, save_main_session=True, test_pipeline=None) -> PipelineResult:
   """
@@ -83,7 +99,10 @@ def run(
   # In this example we pass keyed inputs to RunInference transform.
   # Therefore, we use KeyedModelHandler wrapper over TFModelHandlerNumpy.
   model_loader = KeyedModelHandler(
-      TFModelHandlerNumpy(model_uri=known_args.model_path))
+      TFModelHandlerNumpy(
+          model_uri=known_args.model_path,
+          model_type=ModelType.SAVED_WEIGHTS,
+          create_model_fn=get_model))
 
   pipeline = test_pipeline
   if not test_pipeline:
