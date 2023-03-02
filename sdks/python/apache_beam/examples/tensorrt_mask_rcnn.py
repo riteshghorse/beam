@@ -38,6 +38,7 @@ from apache_beam.options.pipeline_options import SetupOptions
 from PIL import Image
 from detectron2.checkpoint import DetectionCheckpointer
 
+
 def attach_scale_to_key(data):
   #We need scale in post processing hence package accordingly.
   file_name, image_data = data
@@ -64,23 +65,23 @@ def preprocess_image(image: Image.Image) -> Tuple[float, np.ndarray]:
   size = 800 * 1.0
   pre_scale = size / min(height, width)
   if height < width:
-      newh, neww = size, pre_scale * width
+    newh, neww = size, pre_scale * width
   else:
-      newh, neww = pre_scale * height, size
+    newh, neww = pre_scale * height, size
 
   # If delta between min and max dimensions is so that max sized dimension reaches self.max_size_test
   # before min dimension reaches self.min_size_test, keeping the same aspect ratio. We still need to
   # maintain the same aspect ratio and keep max dimension at self.max_size_test.
   if max(newh, neww) > 1333:
-      pre_scale = 1333 * 1.0 / max(newh, neww)
-      newh = newh * pre_scale
-      neww = neww * pre_scale
+    pre_scale = 1333 * 1.0 / max(newh, neww)
+    newh = newh * pre_scale
+    neww = neww * pre_scale
   neww = int(neww + 0.5)
   newh = int(newh + 0.5)
 
   # Scaling factor for normalized box coordinates scaling in post-processing.
-  scaling = max(newh/height, neww/width)
-  
+  scaling = max(newh / height, neww / width)
+
   # Padding.
   image = image.resize((neww, newh), resample=Image.Resampling.BILINEAR)
   pad = Image.new("RGB", (1344, 1344))
@@ -98,7 +99,7 @@ def preprocess_image(image: Image.Image) -> Tuple[float, np.ndarray]:
   #Currently since batch is just one image it is [3, 1344, 1344] == image[[2,1,0]].shape.
   #Hence it just requires preprocessing batch of images and packaging them together into one np array.
   #Scaling in such case will be a list, with unique scaling factor for every image.
-  return (scaling, image[[2,1,0]])
+  return (scaling, image[[2, 1, 0]])
 
 
 class PostProcessor(beam.DoFn):
@@ -146,12 +147,12 @@ class PostProcessor(beam.DoFn):
     #        # Select a mask.
     #        mask = masks[i][n]
 
-    #        # Calculate scaling values for bboxes. 
+    #        # Calculate scaling values for bboxes.
     #        scale = 1344
     #        scale /= scales[i]
     #        scale_y = scale
     #        scale_x = scale
-    #        # Append to detections          
+    #        # Append to detections
     #        detections[i].append({
     #            'ymin': boxes[i][n][0] * scale_y,
     #            'xmin': boxes[i][n][1] * scale_x,
@@ -188,7 +189,7 @@ def parse_known_args(argv):
       '--batch_size',
       dest='batch_size',
       required=True,
-      type=int, 
+      type=int,
       help='Batch size for TensorRT engine.')
   parser.add_argument(
       '--images_dir',
@@ -223,8 +224,7 @@ def run(argv=None, save_main_session=True):
         | 'PreprocessImages' >> beam.MapTuple(
             lambda file_name, data: (file_name, preprocess_image(data)))
         | 'AttachScaleToKey' >> beam.Map(attach_scale_to_key))
-        
-    
+
     predictions = (
         filename_value_pair
         | 'TensorRTRunInference' >> RunInference(engine_handler)
@@ -237,8 +237,5 @@ def run(argv=None, save_main_session=True):
             append_trailing_newlines=True))
 
 
-
-
 if __name__ == '__main__':
   run()
-

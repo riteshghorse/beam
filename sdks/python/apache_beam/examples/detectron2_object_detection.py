@@ -59,12 +59,15 @@ def preprocess_image(data: Image.Image):
   #Represent as numpy array
   image = np.asarray(data, dtype=np.float32)
   #To BGR
-  image = image[...,::-1].copy()
+  image = image[..., ::-1].copy()
   raw_height, raw_width = image.shape[:2]
   #Use Detectron2 image preprocessor
-  torch_image = ResizeShortestEdge(short_edge_length=[1344, 1344], max_size=1344).get_transform(image).apply_image(image)
+  torch_image = ResizeShortestEdge(
+      short_edge_length=[1344, 1344],
+      max_size=1344).get_transform(image).apply_image(image)
   #Convert to tensor
-  torch_image = torch.as_tensor(torch_image.astype("float32").transpose(2, 0, 1))
+  torch_image = torch.as_tensor(
+      torch_image.astype("float32").transpose(2, 0, 1))
   #Represent as input format that model accepts
   inputs = [{"image": torch_image, "height": raw_height, "width": raw_width}]
   return inputs
@@ -118,7 +121,7 @@ def run(argv=None, save_main_session=True):
   """
   known_args, pipeline_args = parse_known_args(argv)
   pipeline_options = PipelineOptions(pipeline_args)
-  pipeline_options.view_as(SetupOptions).save_main_session = True #skip
+  pipeline_options.view_as(SetupOptions).save_main_session = True  #skip
 
   #Leave this part even if using Dataflow
   #It uses Detectron2 specific setup.
@@ -126,29 +129,28 @@ def run(argv=None, save_main_session=True):
   cfg.merge_from_file(known_args.config_file)
   cfg.freeze()
   # model = build_model(cfg)
-  
-  
+
   #For Danny
   #Starting from here and til PytorchModelHandlerTensor section is just a demonstration
-  #how this model actually works. I think this will help to figure out how to make 
-  #same model workable with pipeline. 
+  #how this model actually works. I think this will help to figure out how to make
+  #same model workable with pipeline.
   #Load weights, set device, eval mode on
   # model.load_state_dict(torch.load(known_args.weights))
   # checkpointer = DetectionCheckpointer(model, save_dir="./")
   # checkpointer.save("model_999")
   # model.to(torch.device('cuda'))
   # model.eval()
-  
-  #Sample image. 
+
+  #Sample image.
   # with open(known_args.input) as f:
   #   lines = f.readlines()
   # image = read_image(image_file_name=str.strip(lines[0]))
   # model_input = preprocess_image(image[1])
   #print(model_input)
-  
+
   #For Danny
   #A demonstration how to do inference on a batch of 2. In order to compare between TRT and PyT
-  #we also need to infer PyT with batch size of 16. So the same logic of assembling batches for execution 
+  #we also need to infer PyT with batch size of 16. So the same logic of assembling batches for execution
   #will apply here. I doubt T4 will be able to infer with bs of 16 in case of PyT. Please adjust code
   #to make sure pipelined runs can take advantage of batch execution. If bs 16 is too much for PyT
   #to handle, lower it to bs 8. Thank you! Uncomment to see how batch execution works.
@@ -164,43 +166,44 @@ def run(argv=None, save_main_session=True):
   #   print(outputs)
 
   #For Danny
-  #Not sure how to make it work with RunInference since as input model takes list 
+  #Not sure how to make it work with RunInference since as input model takes list
   #of form [{"image": torch_image, "height": raw_height, "width": raw_width}]
-  #You probably know how to make it run. Uncomment and adjust as needed please. 
+  #You probably know how to make it run. Uncomment and adjust as needed please.
 
   #Error is TypeError: forward() missing 1 required positional argument: 'batched_inputs' [while running 'PyTorchRunInference/BeamML_RunInference']
-  #Apparently no input is passed to forward function for some reason. 
+  #Apparently no input is passed to forward function for some reason.
   #Something under the hood of RunInference or model handlers.
 
   model_handler = PytorchModelHandlerKeyedTensor(
-     state_dict_path=known_args.weights,
-     model_class=build_model,
-     model_params={"cfg":cfg},
-     device='GPU')
-  
+      state_dict_path=known_args.weights,
+      model_class=build_model,
+      model_params={"cfg": cfg},
+      device='GPU')
+
   with beam.Pipeline(options=pipeline_options) as p:
-   filename_value_pair = (
-       p
-       | 'ReadImageNames' >> beam.io.ReadFromText(known_args.input)
-       | 'ReadImageData' >> beam.Map(
-           lambda image_name: read_image(
-               image_file_name=image_name, path_to_dir=known_args.images_dir))
-       | 'PreprocessImages' >> beam.MapTuple(
-           lambda file_name, data: (file_name, preprocess_image(data))))
-   predictions = (
-       filename_value_pair
-       | 'PyTorchRunInference' >> RunInference(KeyedModelHandler(model_handler)))
-   
-   _ = predictions | "WriteOutput" >> beam.io.WriteToText(
-      known_args.output, shard_name_template='', append_trailing_newlines=True)
-   
-   result = p.run()
-   result.wait_until_finish()
-   return result
-        
+    filename_value_pair = (
+        p
+        | 'ReadImageNames' >> beam.io.ReadFromText(known_args.input)
+        | 'ReadImageData' >> beam.Map(
+            lambda image_name: read_image(
+                image_file_name=image_name, path_to_dir=known_args.images_dir))
+        | 'PreprocessImages' >> beam.MapTuple(
+            lambda file_name, data: (file_name, preprocess_image(data))))
+    predictions = (
+        filename_value_pair
+        |
+        'PyTorchRunInference' >> RunInference(KeyedModelHandler(model_handler)))
+
+    _ = predictions | "WriteOutput" >> beam.io.WriteToText(
+        known_args.output,
+        shard_name_template='',
+        append_trailing_newlines=True)
+
+    result = p.run()
+    result.wait_until_finish()
+    return result
 
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
   run()
-           
