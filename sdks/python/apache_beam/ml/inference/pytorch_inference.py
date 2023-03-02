@@ -121,7 +121,7 @@ def default_tensor_inference_fn(
   # torch.no_grad() mitigates GPU memory issues
   # https://github.com/apache/beam/issues/22811
   with torch.no_grad():
-    batched_tensors = torch.stack(batch)
+    # batched_tensors = torch.stack(batch)
     batched_tensors = _convert_to_device(batched_tensors, device)
     predictions = model(batched_tensors, **inference_args)
     return _convert_to_result(batch, predictions)
