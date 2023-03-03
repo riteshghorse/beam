@@ -42,10 +42,14 @@ from apache_beam.runners.runner import PipelineResult
 from PIL import Image
 from typing import Sequence
 from typing import Any
+from typing import List
 from typing import Dict
 from typing import Iterable
 from typing import Optional
 from typing import Sequence
+from typing import Callable
+from typing import Union
+from apache_beam.ml.inference.base import ModelHandler
 
 from detectron2.data.transforms import ResizeShortestEdge
 # from detectron2.checkpoint import DetectionCheckpointer
@@ -53,36 +57,6 @@ from detectron2.data.transforms import ResizeShortestEdge
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 
 
-def custom_tensor_inference_fn(
-    batch: Sequence[torch.Tensor],
-    model: torch.nn.Module,
-    device: str,
-    inference_args: Optional[Dict[str,
-                                  Any]] = None) -> Iterable[PredictionResult]:
-  # torch.no_grad() mitigates GPU memory issues
-  # https://github.com/apache/beam/issues/22811
-  with torch.no_grad():
-    # if batch[0][0]["images"].device != device:
-    
-    # batch = batch.to(device)
-    # batched_tensors = _convert_to_device(batched_tensors, device)
-    outputs = []
-    for b in batch:
-      predictions = model(b, **inference_args)
-      if isinstance(predictions, dict):
-        # Go from one dictionary of type: {key_type1: Iterable<val_type1>,
-        # key_type2: Iterable<val_type2>, ...} where each Iterable is of
-        # length batch_size, to a list of dictionaries:
-        # [{key_type1: value_type1, key_type2: value_type2}]
-        predictions_per_tensor = [
-            dict(zip(predictions.keys(), v)) for v in zip(*predictions.values())
-        ]
-        outputs.append(
-            PredictionResult(x, y) for x, y in zip(b, predictions_per_tensor)
-        )
-      outputs.append(PredictionResult(x, y) for x, y in zip(b, predictions))
-    return outputs
-  
 def read_image(image_file_name: str,
                path_to_dir: Optional[str] = None) -> Tuple[str, Image.Image]:
   if path_to_dir is not None:
@@ -144,6 +118,136 @@ def parse_known_args(argv):
   return parser.parse_known_args(argv)
 
 
+def _load_model(
+    model_class: torch.nn.Module, state_dict_path, device, **model_params):
+  model = model_class(**model_params)
+
+  if device == torch.device('cuda') and not torch.cuda.is_available():
+    logging.warning(
+        "Model handler specified a 'GPU' device, but GPUs are not available. " \
+        "Switching to CPU.")
+    device = torch.device('cpu')
+
+  file = FileSystems.open(state_dict_path, 'rb')
+  try:
+    logging.info(
+        "Loading state_dict_path %s onto a %s device", state_dict_path, device)
+    state_dict = torch.load(file, map_location=device)
+  except RuntimeError as e:
+    if device == torch.device('cuda'):
+      message = "Loading the model onto a GPU device failed due to an " \
+        f"exception:\n{e}\nAttempting to load onto a CPU device instead."
+      logging.warning(message)
+      return _load_model(
+          model_class, state_dict_path, torch.device('cpu'), **model_params)
+    else:
+      raise e
+
+  model.load_state_dict(state_dict)
+  model.to(device)
+  model.eval()
+  logging.info("Finished loading PyTorch model.")
+  return (model, device)
+
+
+def _convert_to_device(examples: Sequence[List[Dict]], device) -> Sequence[List[Dict]]:
+  """
+  Converts samples to a style matching given device.
+
+  **NOTE:** A user may pass in device='GPU' but if GPU is not detected in the
+  environment it must be converted back to CPU.
+  """
+  for item in examples:
+    item[0]["image"].to(device)
+  return examples
+
+
+def _convert_to_result(
+    batch: Iterable, predictions: Union[Iterable, Dict[Any, Iterable]]
+) -> Iterable[PredictionResult]:
+  if isinstance(predictions, dict):
+    # Go from one dictionary of type: {key_type1: Iterable<val_type1>,
+    # key_type2: Iterable<val_type2>, ...} where each Iterable is of
+    # length batch_size, to a list of dictionaries:
+    # [{key_type1: value_type1, key_type2: value_type2}]
+    predictions_per_tensor = [
+        dict(zip(predictions.keys(), v)) for v in zip(*predictions.values())
+    ]
+    return [
+        PredictionResult("prediction", y) for y in predictions_per_tensor
+    ]
+  return [PredictionResult("prediction", y) for y in predictions]
+
+############################
+
+class CustomPytorchModelHandlerTensor(ModelHandler[List[Dict],
+                                             PredictionResult,
+                                             torch.nn.Module]):
+  def __init__(
+      self,
+      state_dict_path: str,
+      model_class: Callable[..., torch.nn.Module],
+      model_params: Dict[str, Any],
+      device: str = 'CPU'):
+    self._state_dict_path = state_dict_path
+    if device == 'GPU':
+      logging.info("Device is set to CUDA")
+      self._device = torch.device('cuda')
+    else:
+      logging.info("Device is set to CPU")
+      self._device = torch.device('cpu')
+    self._model_class = model_class
+    self._model_params = model_params
+
+  def load_model(self) -> torch.nn.Module:
+    """Loads and initializes a Pytorch model for processing."""
+    model, device = _load_model(
+        self._model_class,
+        self._state_dict_path,
+        self._device,
+        **self._model_params)
+    self._device = device
+    return model
+
+  def run_inference(
+      self,
+      batch: Sequence[List[Dict]],
+      model: torch.nn.Module,
+      inference_args: Optional[Dict[str, Any]] = None
+  ) -> Iterable[PredictionResult]:
+    inference_args = {} if not inference_args else inference_args
+    # do inference here itself
+    batched_list = _convert_to_device(batch, self._device)
+    # batched_list = batch
+    predictions = []
+    with torch.no_grad():
+      for bl in batched_list:
+        predictions.append(model(bl, **inference_args))
+    # TODO: can we skip the returns from here?
+    # TODO: log size of input and output.
+    return _convert_to_result(batch, predictions)
+
+  def get_num_bytes(self, batch: Sequence[List[Dict]]) -> int:
+    """
+    Returns:
+      The number of bytes of data for a batch of Tensors.
+    """
+    return sum([sys.getsizeof(el) for el in batch])
+
+  def batch_elements_kwargs(self):
+    return {'max_batch_size': 1}
+        
+  def get_metrics_namespace(self) -> str:
+    """
+    Returns:
+       A namespace for metrics collected by the RunInference transform.
+    """
+    return 'BeamML_PyTorch'
+
+  def validate_inference_args(self, inference_args: Optional[Dict[str, Any]]):
+    pass
+  
+  
 def run(argv=None, save_main_session=True):
   """
   Args:
@@ -165,58 +269,12 @@ def run(argv=None, save_main_session=True):
   cfg = get_cfg()
   cfg.merge_from_file(known_args.config_file)
   cfg.freeze()
-  # model = build_model(cfg)
 
-  #For Danny
-  #Starting from here and til PytorchModelHandlerTensor section is just a demonstration
-  #how this model actually works. I think this will help to figure out how to make
-  #same model workable with pipeline.
-  #Load weights, set device, eval mode on
-  # model.load_state_dict(torch.load(known_args.weights))
-  # checkpointer = DetectionCheckpointer(model, save_dir="./")
-  # checkpointer.save("model_999")
-  # model.to(torch.device('cuda'))
-  # model.eval()
-
-  #Sample image.
-  # with open(known_args.input) as f:
-  #   lines = f.readlines()
-  # image = read_image(image_file_name=str.strip(lines[0]))
-  # model_input = preprocess_image(image[1])
-  #print(model_input)
-
-  #For Danny
-  #A demonstration how to do inference on a batch of 2. In order to compare between TRT and PyT
-  #we also need to infer PyT with batch size of 16. So the same logic of assembling batches for execution
-  #will apply here. I doubt T4 will be able to infer with bs of 16 in case of PyT. Please adjust code
-  #to make sure pipelined runs can take advantage of batch execution. If bs 16 is too much for PyT
-  #to handle, lower it to bs 8. Thank you! Uncomment to see how batch execution works.
-
-  #second_image = read_image(image_file_name=str.strip(lines[1]))
-  #model_input_2 = preprocess_image(second_image[1])
-  #model_input.append(model_input_2[0])
-  #print(model_input)
-
-  #Infer
-  # with torch.no_grad():
-  #   outputs = model(model_input)
-  #   print(outputs)
-
-  #For Danny
-  #Not sure how to make it work with RunInference since as input model takes list
-  #of form [{"image": torch_image, "height": raw_height, "width": raw_width}]
-  #You probably know how to make it run. Uncomment and adjust as needed please.
-
-  #Error is TypeError: forward() missing 1 required positional argument: 'batched_inputs' [while running 'PyTorchRunInference/BeamML_RunInference']
-  #Apparently no input is passed to forward function for some reason.
-  #Something under the hood of RunInference or model handlers.
-
-  model_handler = PytorchModelHandlerTensor(
+  model_handler = CustomPytorchModelHandlerTensor(
       state_dict_path=known_args.weights,
       model_class=build_model,
       model_params={"cfg": cfg},
-      device='GPU',
-      inference_fn=custom_tensor_inference_fn)
+      device='GPU')
 
   with beam.Pipeline(options=pipeline_options) as p:
     filename_value_pair = (
@@ -227,15 +285,15 @@ def run(argv=None, save_main_session=True):
                 image_file_name=image_name, path_to_dir=known_args.images_dir))
         | 'PreprocessImages' >> beam.MapTuple(
             lambda file_name, data: (file_name, preprocess_image(data))))
-    predictions = (
+    _ = (
         filename_value_pair
         |
         'PyTorchRunInference' >> RunInference(KeyedModelHandler(model_handler)))
 
-    _ = predictions | "WriteOutput" >> beam.io.WriteToText(
-        known_args.output,
-        shard_name_template='',
-        append_trailing_newlines=True)
+    # _ = predictions | "WriteOutput" >> beam.io.WriteToText(
+    #     known_args.output,
+    #     shard_name_template='',
+    #     append_trailing_newlines=True)
 
     result = p.run()
     result.wait_until_finish()

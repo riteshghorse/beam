@@ -106,7 +106,7 @@ def preprocess_image(data: Image.Image):
   torch_image = torch.as_tensor(
       torch_image.astype("float32").transpose(2, 0, 1))
   #Represent as input format that model accepts
-  inputs = [{"image": torch_image, "height": raw_height, "width": raw_width}]
+  inputs = {"image": torch_image}
   return inputs
 
 
@@ -215,8 +215,7 @@ def run(argv=None, save_main_session=True):
       state_dict_path=known_args.weights,
       model_class=build_model,
       model_params={"cfg": cfg},
-      device='GPU',
-      inference_fn=custom_tensor_inference_fn)
+      device='GPU')
 
   with beam.Pipeline(options=pipeline_options) as p:
     filename_value_pair = (
