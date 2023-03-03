@@ -63,7 +63,7 @@ def custom_tensor_inference_fn(
   # https://github.com/apache/beam/issues/22811
   with torch.no_grad():
     # if batch[0][0]["images"].device != device:
-    
+
     # batch = batch.to(device)
     # batched_tensors = _convert_to_device(batched_tensors, device)
     outputs = []
@@ -75,14 +75,15 @@ def custom_tensor_inference_fn(
         # length batch_size, to a list of dictionaries:
         # [{key_type1: value_type1, key_type2: value_type2}]
         predictions_per_tensor = [
-            dict(zip(predictions.keys(), v)) for v in zip(*predictions.values())
+            dict(zip(predictions.keys(), v))
+            for v in zip(*predictions.values())
         ]
         outputs.append(
-            PredictionResult(x, y) for x, y in zip(b, predictions_per_tensor)
-        )
+            PredictionResult(x, y) for x, y in zip(b, predictions_per_tensor))
       outputs.append(PredictionResult(x, y) for x, y in zip(b, predictions))
     return outputs
-  
+
+
 def read_image(image_file_name: str,
                path_to_dir: Optional[str] = None) -> Tuple[str, Image.Image]:
   if path_to_dir is not None:

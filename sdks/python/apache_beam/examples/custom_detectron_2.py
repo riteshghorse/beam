@@ -150,7 +150,8 @@ def _load_model(
   return (model, device)
 
 
-def _convert_to_device(examples: Sequence[List[Dict]], device) -> Sequence[List[Dict]]:
+def _convert_to_device(examples: Sequence[List[Dict]],
+                       device) -> Sequence[List[Dict]]:
   """
   Converts samples to a style matching given device.
 
@@ -173,16 +174,16 @@ def _convert_to_result(
     predictions_per_tensor = [
         dict(zip(predictions.keys(), v)) for v in zip(*predictions.values())
     ]
-    return [
-        PredictionResult("prediction", y) for y in predictions_per_tensor
-    ]
+    return [PredictionResult("prediction", y) for y in predictions_per_tensor]
   return [PredictionResult("prediction", y) for y in predictions]
+
 
 ############################
 
+
 class CustomPytorchModelHandlerTensor(ModelHandler[List[Dict],
-                                             PredictionResult,
-                                             torch.nn.Module]):
+                                                   PredictionResult,
+                                                   torch.nn.Module]):
   def __init__(
       self,
       state_dict_path: str,
@@ -236,7 +237,7 @@ class CustomPytorchModelHandlerTensor(ModelHandler[List[Dict],
 
   def batch_elements_kwargs(self):
     return {'max_batch_size': 1}
-        
+
   def get_metrics_namespace(self) -> str:
     """
     Returns:
@@ -246,8 +247,8 @@ class CustomPytorchModelHandlerTensor(ModelHandler[List[Dict],
 
   def validate_inference_args(self, inference_args: Optional[Dict[str, Any]]):
     pass
-  
-  
+
+
 def run(argv=None, save_main_session=True):
   """
   Args:
