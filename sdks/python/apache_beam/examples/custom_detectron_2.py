@@ -35,10 +35,8 @@ from apache_beam.io.filesystems import FileSystems
 from apache_beam.ml.inference.base import KeyedModelHandler
 from apache_beam.ml.inference.base import PredictionResult
 from apache_beam.ml.inference.base import RunInference
-from apache_beam.ml.inference.pytorch_inference import PytorchModelHandlerKeyedTensor, PytorchModelHandlerTensor
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
-from apache_beam.runners.runner import PipelineResult
 from PIL import Image
 from typing import Sequence
 from typing import Any
