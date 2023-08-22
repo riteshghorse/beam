@@ -47,9 +47,9 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 
 
-class WordExtractingDoFn(beam.DoFn):
+class WordExtractingDoFn(beam.PTransform):
   """Parse each line of input text into words."""
-  def process(self, element):
+  def expand(self, element):
     """Returns an iterator over the words of this element.
 
     The element is a line of text.  If the line is blank, note that, too.
@@ -60,7 +60,19 @@ class WordExtractingDoFn(beam.DoFn):
     Returns:
       The processed element.
     """
-    return re.findall(r'[\w\']+', element, re.UNICODE)
+    output = (
+        element
+        | beam.Map(lambda e: re.findall(r'[\w\']+', e, re.UNICODE)))
+    return output
+
+  def display_data(self) -> dict:
+    parent_dd = super().display_data()
+    parent_dd[
+        "my_custom_display_data_key"] = beam.transforms.display.DisplayDataItem(
+            "my_custom_display_data_item_value",
+            label="my_custom_display_data_item_label",
+        )
+    return parent_dd
 
 
 def run(argv=None, save_main_session=True):
@@ -91,7 +103,7 @@ def run(argv=None, save_main_session=True):
 
     counts = (
         lines
-        | 'Split' >> (beam.ParDo(WordExtractingDoFn()).with_output_types(str))
+        | 'Split' >> WordExtractingDoFn().with_output_types(str)
         | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
         | 'GroupAndSum' >> beam.CombinePerKey(sum))
 
