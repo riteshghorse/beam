@@ -62,6 +62,16 @@ class WordExtractingDoFn(beam.DoFn):
     """
     return re.findall(r'[\w\']+', element, re.UNICODE)
 
+class UpperCasePTransform(beam.PTransform):
+  def expand(self, p):
+    self.p = p
+    return p | beam.Map(lambda x: x.upper())
+  
+  def display_data(self) -> dict:
+    dd = {}
+    dd["upper_case"] = beam.transforms.display.DisplayDataItem(
+      "upper_case_key", label="upper_case_label")
+    return dd
 
 def run(argv=None, save_main_session=True):
   """Main entry point; defines and runs the wordcount pipeline."""
@@ -87,7 +97,8 @@ def run(argv=None, save_main_session=True):
   with beam.Pipeline(options=pipeline_options) as p:
 
     # Read the text file[pattern] into a PCollection.
-    lines = p | 'Read' >> ReadFromText(known_args.input)
+    lines = (p | 'Read' >> ReadFromText(known_args.input)
+             | UpperCasePTransform())
 
     counts = (
         lines

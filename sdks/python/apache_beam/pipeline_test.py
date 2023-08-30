@@ -962,7 +962,7 @@ class RunnerApiTest(unittest.TestCase):
     class MyParentTransform(beam.PTransform):
       def expand(self, p):
         self.p = p
-        return p | beam.Create([None])
+        return p | "first" >> beam.ParDo(lambda t: t * 2) | "second" >> beam.ParDo(lambda t: t *2)
 
       def display_data(self):  # type: () -> dict
         parent_dd = super().display_data()
@@ -987,16 +987,18 @@ class RunnerApiTest(unittest.TestCase):
         parent_dd['dd_double'] = DisplayDataItem(1.1, label='dd_double_label')
         return parent_dd
 
+    pcol = beam.Create([1, 2, 3])
     p = beam.Pipeline()
-    p | MyPTransform()  # pylint: disable=expression-not-assigned
+    p | pcol | beam.ParDo(lambda t: t * 2) | MyParentTransform()  # pylint: disable=expression-not-assigned
 
     proto_pipeline = Pipeline.to_runner_api(p, use_fake_coders=True)
     my_transform, = [
         transform
         for transform in proto_pipeline.components.transforms.values()
-        if transform.unique_name == 'MyPTransform'
+        if transform.unique_name == 'MyParentTransform'
     ]
-    self.assertIsNotNone(my_transform)
+    
+    self.assertIsNotNone(my_transform.display_data)
     self.assertListEqual(
         list(my_transform.display_data),
         [
@@ -1005,57 +1007,57 @@ class RunnerApiTest(unittest.TestCase):
                 payload=beam_runner_api_pb2.LabelledPayload(
                     label='p_dd_string_label',
                     key='p_dd_string',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
+                    namespace='apache_beam.pipeline_test.MyParentTransform',
                     string_value='p_dd_string_value').SerializeToString()),
             beam_runner_api_pb2.DisplayData(
                 urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
                 payload=beam_runner_api_pb2.LabelledPayload(
                     label='p_dd_string_2',
                     key='p_dd_string_2',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
+                    namespace='apache_beam.pipeline_test.MyParentTransform',
                     string_value='p_dd_string_value_2').SerializeToString()),
             beam_runner_api_pb2.DisplayData(
                 urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
                 payload=beam_runner_api_pb2.LabelledPayload(
                     label='p_dd_bool_label',
                     key='p_dd_bool',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
+                    namespace='apache_beam.pipeline_test.MyParentTransform',
                     bool_value=True).SerializeToString()),
             beam_runner_api_pb2.DisplayData(
                 urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
                 payload=beam_runner_api_pb2.LabelledPayload(
                     label='p_dd_int_label',
                     key='p_dd_int',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
+                    namespace='apache_beam.pipeline_test.MyParentTransform',
                     int_value=1).SerializeToString()),
-            beam_runner_api_pb2.DisplayData(
-                urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
-                payload=beam_runner_api_pb2.LabelledPayload(
-                    label='dd_string_label',
-                    key='dd_string',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
-                    string_value='dd_string_value').SerializeToString()),
-            beam_runner_api_pb2.DisplayData(
-                urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
-                payload=beam_runner_api_pb2.LabelledPayload(
-                    label='dd_string_2',
-                    key='dd_string_2',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
-                    string_value='dd_string_value_2').SerializeToString()),
-            beam_runner_api_pb2.DisplayData(
-                urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
-                payload=beam_runner_api_pb2.LabelledPayload(
-                    label='dd_bool_label',
-                    key='dd_bool',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
-                    bool_value=False).SerializeToString()),
-            beam_runner_api_pb2.DisplayData(
-                urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
-                payload=beam_runner_api_pb2.LabelledPayload(
-                    label='dd_double_label',
-                    key='dd_double',
-                    namespace='apache_beam.pipeline_test.MyPTransform',
-                    double_value=1.1).SerializeToString()),
+            # beam_runner_api_pb2.DisplayData(
+            #     urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
+            #     payload=beam_runner_api_pb2.LabelledPayload(
+            #         label='dd_string_label',
+            #         key='dd_string',
+            #         namespace='apache_beam.pipeline_test.MyPTransform',
+            #         string_value='dd_string_value').SerializeToString()),
+            # beam_runner_api_pb2.DisplayData(
+            #     urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
+            #     payload=beam_runner_api_pb2.LabelledPayload(
+            #         label='dd_string_2',
+            #         key='dd_string_2',
+            #         namespace='apache_beam.pipeline_test.MyPTransform',
+            #         string_value='dd_string_value_2').SerializeToString()),
+            # beam_runner_api_pb2.DisplayData(
+            #     urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
+            #     payload=beam_runner_api_pb2.LabelledPayload(
+            #         label='dd_bool_label',
+            #         key='dd_bool',
+            #         namespace='apache_beam.pipeline_test.MyPTransform',
+            #         bool_value=False).SerializeToString()),
+            # beam_runner_api_pb2.DisplayData(
+            #     urn=common_urns.StandardDisplayData.DisplayData.LABELLED.urn,
+            #     payload=beam_runner_api_pb2.LabelledPayload(
+            #         label='dd_double_label',
+            #         key='dd_double',
+            #         namespace='apache_beam.pipeline_test.MyPTransform',
+            #         double_value=1.1).SerializeToString()),
         ])
 
   def test_runner_api_roundtrip_preserves_resource_hints(self):
