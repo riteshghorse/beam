@@ -1355,11 +1355,12 @@ class AppliedPTransform(object):
             for tag,
             out in sorted(self.named_outputs().items())
         },
+        display_data=DisplayData.create_from(self.transform).to_proto()
+        if self.transform else None,
         environment_id=environment_id,
         annotations=self.annotations,
         # TODO(https://github.com/apache/beam/issues/18012): Add display_data.
-        display_data=DisplayData.create_from(self.transform).to_proto()
-        if self.transform else None)
+    )
 
   @staticmethod
   def from_runner_api(
