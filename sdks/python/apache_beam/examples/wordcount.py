@@ -45,6 +45,7 @@ from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
+from apache_beam.transforms.display import DisplayDataItem
 
 
 class WordExtractingDoFn(beam.DoFn):
@@ -62,16 +63,33 @@ class WordExtractingDoFn(beam.DoFn):
     """
     return re.findall(r'[\w\']+', element, re.UNICODE)
 
+
 class UpperCasePTransform(beam.PTransform):
   def expand(self, p):
     self.p = p
     return p | beam.Map(lambda x: x.upper())
-  
+
   def display_data(self) -> dict:
     dd = {}
     dd["upper_case"] = beam.transforms.display.DisplayDataItem(
-      "upper_case_key", label="upper_case_label")
+        "upper_case_key", label="upper_case_label")
     return dd
+
+
+class MyParentTransform(beam.PTransform):
+  def expand(self, p):
+    self.p = p
+    return p | "first" >> beam.Map(lambda t: t.upper())
+
+  def display_data(self):
+    parent_dd = super().display_data()
+    parent_dd['p_dd_string'] = DisplayDataItem(
+        'p_dd_string_value', label='p_dd_string_label')
+    parent_dd['p_dd_string_2'] = DisplayDataItem('p_dd_string_value_2')
+    parent_dd['p_dd_bool'] = DisplayDataItem(True, label='p_dd_bool_label')
+    parent_dd['p_dd_int'] = DisplayDataItem(1, label='p_dd_int_label')
+    return parent_dd
+
 
 def run(argv=None, save_main_session=True):
   """Main entry point; defines and runs the wordcount pipeline."""
@@ -91,18 +109,16 @@ def run(argv=None, save_main_session=True):
   # We use the save_main_session option because one or more DoFn's in this
   # workflow rely on global context (e.g., a module imported at module level).
   pipeline_options = PipelineOptions(pipeline_args)
-  pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
+  pipeline_options.view_as(SetupOptions).save_main_session = True
 
   # The pipeline will be run on exiting the with block.
   with beam.Pipeline(options=pipeline_options) as p:
-
-    # Read the text file[pattern] into a PCollection.
-    lines = (p | 'Read' >> ReadFromText(known_args.input)
-             | UpperCasePTransform())
+    lines = p | 'Read' >> ReadFromText(known_args.input)
 
     counts = (
         lines
-        | 'Split' >> (beam.ParDo(WordExtractingDoFn()).with_output_types(str))
+        | 'Split' >> beam.ParDo(WordExtractingDoFn()).with_output_types(str)
+        | 'CustomPT' >> MyParentTransform()
         | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
         | 'GroupAndSum' >> beam.CombinePerKey(sum))
 
