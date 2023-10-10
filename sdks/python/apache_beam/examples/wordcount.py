@@ -105,6 +105,8 @@ def run(argv=None, save_main_session=True):
     # pylint: disable=expression-not-assigned
     output | 'Write' >> WriteToText(known_args.output)
 
+    _ = p | beam.WindowInto(beam.window.FixedWindows(2 * 30 * 24 * 60 * 60))
+
 
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
