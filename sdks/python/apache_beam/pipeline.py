@@ -1337,6 +1337,18 @@ class AppliedPTransform(object):
       environment_id = context.get_environment_id_for_resource_hints(
           self.resource_hints)
 
+    inputs = {
+        tag: context.pcollections.get_id(pc)
+        for tag,
+        pc in sorted(self.named_inputs().items())
+    }
+
+    if 'WindowInto(WindowIntoFn)' in self.full_label and not inputs:
+      raise ValueError(
+          "No input PCollection for WindowInto. "
+          "Please make sure that beam.WindowInto follows "
+          "a PCollection in the pipeline.")
+
     return beam_runner_api_pb2.PTransform(
         unique_name=self.full_label,
         spec=transform_spec,
@@ -1344,11 +1356,7 @@ class AppliedPTransform(object):
             context.transforms.get_id(part, label=part.full_label)
             for part in self.parts
         ],
-        inputs={
-            tag: context.pcollections.get_id(pc)
-            for tag,
-            pc in sorted(self.named_inputs().items())
-        },
+        inputs=inputs,
         outputs={
             tag: context.pcollections.get_id(out)
             for tag,
