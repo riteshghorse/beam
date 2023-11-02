@@ -22,6 +22,7 @@ import static org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Pr
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.services.bigquery.model.TableRow;
+import com.google.cloud.bigquery.storage.v1.AppendRowsRequest;
 import com.google.cloud.bigquery.storage.v1.AppendRowsResponse;
 import com.google.cloud.bigquery.storage.v1.Exceptions;
 import com.google.cloud.bigquery.storage.v1.Exceptions.StreamFinalizedException;
@@ -125,6 +126,7 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
   private final Coder<BigQueryStorageApiInsertError> failedRowsCoder;
   private final boolean autoUpdateSchema;
   private final boolean ignoreUnknownValues;
+  private final AppendRowsRequest.MissingValueInterpretation defaultMissingValueInterpretation;
 
   private final Duration streamIdleTime = DEFAULT_STREAM_IDLE_TIME;
   private final TupleTag<BigQueryStorageApiInsertError> failedRowsTag;
@@ -217,7 +219,8 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
       TupleTag<BigQueryStorageApiInsertError> failedRowsTag,
       @Nullable TupleTag<TableRow> successfulRowsTag,
       boolean autoUpdateSchema,
-      boolean ignoreUnknownValues) {
+      boolean ignoreUnknownValues,
+      AppendRowsRequest.MissingValueInterpretation defaultMissingValueInterpretation) {
     this.dynamicDestinations = dynamicDestinations;
     this.createDisposition = createDisposition;
     this.kmsKey = kmsKey;
@@ -229,6 +232,7 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
     this.succussfulRowsCoder = successfulRowsCoder;
     this.autoUpdateSchema = autoUpdateSchema;
     this.ignoreUnknownValues = ignoreUnknownValues;
+    this.defaultMissingValueInterpretation = defaultMissingValueInterpretation;
   }
 
   @Override
@@ -441,10 +445,12 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
       Coder<DestinationT> destinationCoder = dynamicDestinations.getDestinationCoder();
       Callable<Boolean> tryCreateTable =
           () -> {
+            DestinationT dest = element.getKey().getKey();
             CreateTableHelpers.possiblyCreateTable(
                 c.getPipelineOptions().as(BigQueryOptions.class),
                 tableDestination,
-                () -> dynamicDestinations.getSchema(element.getKey().getKey()),
+                () -> dynamicDestinations.getSchema(dest),
+                () -> dynamicDestinations.getTableConstraints(dest),
                 createDisposition,
                 destinationCoder,
                 kmsKey,
@@ -492,7 +498,11 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
                                   client.unpin();
                                   client.close();
                                 }))
-                    .withAppendClient(datasetService, getOrCreateStream, false);
+                    .withAppendClient(
+                        datasetService,
+                        getOrCreateStream,
+                        false,
+                        defaultMissingValueInterpretation);
             // This pin is "owned" by the cache.
             Preconditions.checkStateNotNull(info.getStreamAppendClient()).pin();
             return info;
@@ -552,7 +562,11 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
               appendClientInfo.set(
                   appendClientInfo
                       .get()
-                      .withAppendClient(datasetService, getOrCreateStream, false));
+                      .withAppendClient(
+                          datasetService,
+                          getOrCreateStream,
+                          false,
+                          defaultMissingValueInterpretation));
               StreamAppendClient streamAppendClient =
                   Preconditions.checkArgumentNotNull(
                       appendClientInfo.get().getStreamAppendClient());
@@ -597,7 +611,11 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
               appendClientInfo.set(
                   appendClientInfo
                       .get()
-                      .withAppendClient(datasetService, getOrCreateStream, false));
+                      .withAppendClient(
+                          datasetService,
+                          getOrCreateStream,
+                          false,
+                          defaultMissingValueInterpretation));
               return Preconditions.checkStateNotNull(appendClientInfo.get().getStreamAppendClient())
                   .appendRows(context.offset, context.protoRows);
             } catch (Exception e) {
@@ -816,6 +834,8 @@ public class StorageApiWritesShardedRecords<DestinationT extends @NonNull Object
                       newSchema.get(), appendClientInfo.get().getCloseAppendClient(), false));
               APPEND_CLIENTS.invalidate(element.getKey());
               APPEND_CLIENTS.put(element.getKey(), appendClientInfo.get());
+              LOG.debug(
+                  "Fetched updated schema for table {}:\n\t{}", tableId, updatedSchemaReturned);
               updatedSchema.write(newSchema.get());
             }
           }

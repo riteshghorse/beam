@@ -101,7 +101,7 @@ class _BeamArgumentParser(argparse.ArgumentParser):
     key/value form.
     """
     # Extract the option name from positional argument ['pos_arg']
-    assert args != () and len(args[0]) >= 1
+    assert args and len(args[0]) >= 1
     if args[0][0] != '-':
       option_name = args[0]
       if kwargs.get('nargs') is None:  # make them optionally templated
@@ -514,6 +514,14 @@ class StandardOptions(PipelineOptions):
             'Hints specified via this option override hints specified '
             'at transform level. Interpretation of hints is defined by '
             'Beam runners.'))
+
+    parser.add_argument(
+        '--auto_unique_labels',
+        default=False,
+        action='store_true',
+        help='Whether to automatically generate unique transform labels '
+        'for every transform. The default behavior is to raise an '
+        'exception if a transform is created with a non-unique label.')
 
 
 class CrossLanguageOptions(PipelineOptions):
@@ -1127,6 +1135,22 @@ class WorkerOptions(PipelineOptions):
         dest='min_cpu_platform',
         type=str,
         help='GCE minimum CPU platform. Default is determined by GCP.')
+    parser.add_argument(
+        '--max_cache_memory_usage_mb',
+        dest='max_cache_memory_usage_mb',
+        type=int,
+        default=100,
+        help=(
+            'Size of the SDK Harness cache to store user state and side '
+            'inputs in MB. Default is 100MB. If the cache is full, least '
+            'recently used elements will be evicted. This cache is per '
+            'each SDK Harness instance. SDK Harness is a component '
+            'responsible for executing the user code and communicating with '
+            'the runner. Depending on the runner, there may be more than one '
+            'SDK Harness process running on the same worker node. Increasing '
+            'cache size might improve performance of some pipelines, but can '
+            'lead to an increase in memory consumption and OOM errors if '
+            'workers are not appropriately provisioned.'))
 
   def validate(self, validator):
     errors = []

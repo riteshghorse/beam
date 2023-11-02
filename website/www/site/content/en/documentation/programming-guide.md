@@ -834,9 +834,15 @@ func init() {
 
 ##### 4.2.1.1. Applying ParDo {#applying-pardo}
 
-{{< paragraph class="language-java language-py" >}}
+{{< paragraph class="language-java">}}
 Like all Beam transforms, you apply `ParDo` by calling the `apply` method on the
 input `PCollection` and passing `ParDo` as an argument, as shown in the
+following example code:
+{{< /paragraph >}}
+
+{{< paragraph class="language-py">}}
+Like all Beam transforms, you apply `ParDo` by calling the `beam.ParDo` on the
+input `PCollection` and passing the `DoFn` as an argument, as shown in the
 following example code:
 {{< /paragraph >}}
 
@@ -1206,10 +1212,13 @@ Here is a sequence diagram that shows the lifecycle of the DoFn during
  the execution of the ParDo transform. The comments give useful
  information to pipeline developers such as the constraints that
  apply to the objects or particular cases such as failover or
- instance reuse. They also give instantiation use cases. Two key points
- to note are that (1) teardown is done on a best effort basis and thus
- isn't guaranteed and (2) the number of DoFn instances is runner
- dependent.
+ instance reuse. They also give instantiation use cases. Three key points
+ to note are that:
+ 1. Teardown is done on a best effort basis and thus
+ isn't guaranteed.
+ 2. The number of DoFn instances created at runtime is runner-dependent.
+ 3. For the Python SDK, the pipeline contents such as DoFn user code,
+ is [serialized into a bytecode](https://beam.apache.org/documentation/sdks/python-pipeline-dependencies/#pickling-and-managing-the-main-session). Therefore, `DoFn`s should not reference objects that are not serializable, such as locks. To manage a single instance of an object across multiple `DoFn` instances in the same process, use utilities in the [shared.py](https://beam.apache.org/releases/pydoc/current/apache_beam.utils.shared.html) module.
 
 <!-- The source for the sequence diagram can be found in the SVG resource. -->
 ![This is a sequence diagram that shows the lifecycle of the DoFn](/images/dofn-sequence-diagram.svg)
