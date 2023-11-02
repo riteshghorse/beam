@@ -45,11 +45,23 @@ from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
+from apache_beam.transforms.display import DisplayDataItem
 
 
-class WordExtractingDoFn(beam.PTransform):
+class PairAndCombine(beam.PTransform):
+  def __init__(self):
+    pass
+
+  def expand(self, pcoll):
+    return (pcoll | beam.Map(lambda x: (x, 1)) | beam.CombinePerKey(sum))
+
+  def display_data(self):
+    return {'fn': DisplayDataItem('MyPTransform', label='Transform Custom')}
+
+
+class WordExtractingDoFn(beam.DoFn):
   """Parse each line of input text into words."""
-  def expand(self, element):
+  def process(self, element):
     """Returns an iterator over the words of this element.
 
     The element is a line of text.  If the line is blank, note that, too.
@@ -60,19 +72,7 @@ class WordExtractingDoFn(beam.PTransform):
     Returns:
       The processed element.
     """
-    output = (
-        element
-        | beam.Map(lambda e: re.findall(r'[\w\']+', e, re.UNICODE)))
-    return output
-
-  def display_data(self) -> dict:
-    parent_dd = super().display_data()
-    parent_dd[
-        "my_custom_display_data_key"] = beam.transforms.display.DisplayDataItem(
-            "my_custom_display_data_item_value",
-            label="my_custom_display_data_item_label",
-        )
-    return parent_dd
+    return re.findall(r'[\w\']+', element, re.UNICODE)
 
 
 def run(argv=None, save_main_session=True):
@@ -103,9 +103,11 @@ def run(argv=None, save_main_session=True):
 
     counts = (
         lines
-        | 'Split' >> WordExtractingDoFn().with_output_types(str)
-        | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
-        | 'GroupAndSum' >> beam.CombinePerKey(sum))
+        | 'Split' >> (beam.ParDo(WordExtractingDoFn()).with_output_types(str))
+        | 'custom' >> PairAndCombine())
+
+    # | 'PairWithOne' >> beam.Map(lambda x: (x, 1))
+    # | 'GroupAndSum' >> beam.CombinePerKey(sum))
 
     # Format the counts into a PCollection of strings.
     def format_result(word, count):

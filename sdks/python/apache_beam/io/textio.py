@@ -890,6 +890,9 @@ class WriteToText(PTransform):
   def expand(self, pcoll):
     return pcoll | Write(self._sink)
 
+  def display_data(self) -> dict:
+    return {'fn': DisplayDataItem('custom write value', label='MyDisplayData')}
+
 
 try:
   import pandas
