@@ -28,6 +28,8 @@ from typing import TypeVar
 import apache_beam as beam
 from apache_beam.pvalue import PCollection
 
+from apache_beam.typehints.decorators import WithTypeHints
+
 RequestT = TypeVar('RequestT')
 ResponseT = TypeVar('ResponseT')
 
@@ -141,6 +143,7 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
     self._cache_reader = cache_reader
     self._cache_writer = cache_writer
     self._throttler = throttler
+    self.type_hint = None
 
   def expand(self, requests: PCollection[RequestT]) -> PCollection[ResponseT]:
     # TODO(riteshghorse): add Cache and Throttle PTransforms.
@@ -149,6 +152,9 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
         timeout=self._timeout,
         should_backoff=self._should_backoff,
         repeater=self._repeater)
+
+  def with_output_types(self, *args, **kwargs):
+    return WithTypeHints.with_output_types(self, *args, **kwargs)
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
@@ -187,11 +193,15 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
     self._timeout = timeout
     self._should_backoff = should_backoff
     self._repeater = repeater
+    self.output_type = None
 
   def expand(
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
     return requests | beam.ParDo(_CallDoFn(self._caller, self._timeout))
+
+  def with_output_types(self, type_hint):
+    self.output_type = type_hint
 
 
 class _CallDoFn(beam.DoFn, Generic[RequestT, ResponseT]):
@@ -206,7 +216,7 @@ class _CallDoFn(beam.DoFn, Generic[RequestT, ResponseT]):
     with concurrent.futures.ThreadPoolExecutor() as executor:
       future = executor.submit(self._caller, request)
       try:
-        yield future.result(timeout=self._timeout)
+        yield request, future.result(timeout=self._timeout)
       except concurrent.futures.TimeoutError:
         raise UserCodeTimeoutException(
             f'Timeout {self._timeout} exceeded '

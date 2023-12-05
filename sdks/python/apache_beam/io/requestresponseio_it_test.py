@@ -72,7 +72,7 @@ class EchoRequest:
 @dataclass
 class EchoResponse:
   id: str
-  payload: bytes
+  r_payload: bytes
 
 
 class EchoHTTPCaller(Caller):
@@ -102,7 +102,7 @@ class EchoHTTPCaller(Caller):
         resp_body = resp.json()
         resp_id = resp_body['id']
         payload = resp_body['payload']
-        return EchoResponse(id=resp_id, payload=bytes(payload, 'utf-8'))
+        return EchoResponse(id=resp_id, r_payload=bytes(payload, 'utf-8'))
 
       if resp.status == 429:  # Too Many Requests
         raise UserCodeQuotaException(resp.reason)
