@@ -200,9 +200,6 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
     return requests | beam.ParDo(_CallDoFn(self._caller, self._timeout))
 
-  def with_output_types(self, type_hint):
-    self.output_type = type_hint
-
 
 class _CallDoFn(beam.DoFn, Generic[RequestT, ResponseT]):
   def setup(self):
@@ -216,7 +213,7 @@ class _CallDoFn(beam.DoFn, Generic[RequestT, ResponseT]):
     with concurrent.futures.ThreadPoolExecutor() as executor:
       future = executor.submit(self._caller, request)
       try:
-        yield request, future.result(timeout=self._timeout)
+        return future.result(timeout=self._timeout)
       except concurrent.futures.TimeoutError:
         raise UserCodeTimeoutException(
             f'Timeout {self._timeout} exceeded '
