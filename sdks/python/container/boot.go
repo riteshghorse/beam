@@ -427,7 +427,7 @@ func logSubmissionEnvDependencies(ctx context.Context, logger *tools.Logger, dir
 // 		return err
 // 	}
 // 	logger.Printf(ctx, string(content))
-    dependencies = os.Getenv("SUBMISSION_DEPENDENCIES")
+    dependencies := os.Getenv("SUBMISSION_DEPENDENCIES")
     logger.Printf(ctx, dependencies)
 	return nil
 }
