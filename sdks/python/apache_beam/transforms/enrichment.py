@@ -34,7 +34,6 @@ OutputT = TypeVar('OutputT')
 def cross_join(element):
   right_dict = element[1].as_dict()
   left_dict = element[0].as_dict()
-
   for k, v in right_dict.items():
     left_dict[k] = v
   return beam.Row(**left_dict)
