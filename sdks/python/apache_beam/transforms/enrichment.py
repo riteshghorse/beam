@@ -21,7 +21,7 @@ import apache_beam as beam
 from apache_beam.io.requestresponseio import Caller
 from apache_beam.io.requestresponseio import CacheReader
 from apache_beam.io.requestresponseio import CacheWriter
-from apache_beam.io.requestresponseio import DEFAULT_TIMEOUT
+from apache_beam.io.requestresponseio import DEFAULT_TIMEOUT_SECS
 from apache_beam.io.requestresponseio import PreCallThrottler
 from apache_beam.io.requestresponseio import Repeater
 from apache_beam.io.requestresponseio import RequestResponseIO
@@ -57,7 +57,7 @@ class Enrichment(beam.PTransform[beam.PCollection[InputT],
       self,
       source_handler: EnrichmentSourceHandler,
       join_fn: Callable = cross_join,
-      timeout: Optional[float] = DEFAULT_TIMEOUT,
+      timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
       repeater: Optional[Repeater] = None,
       cache_reader: Optional[CacheReader] = None,
