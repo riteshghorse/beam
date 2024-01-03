@@ -38,7 +38,7 @@ OutputT = TypeVar('OutputT')
 JoinFn = Callable[[Tuple[beam.Row, beam.Row]], beam.Row]
 
 
-def cross_join(element: Tuple[beam.Row, beam.Row]) -> beam.Row:
+def cross_join(element: Tuple[dict, dict]) -> beam.Row:
   """cross_join performs a cross join between two `beam.Row` objects.
 
     Joins the columns of the right `beam.Row` onto the left `beam.Row`.
@@ -50,11 +50,10 @@ def cross_join(element: Tuple[beam.Row, beam.Row]) -> beam.Row:
     Returns:
       `beam.Row` containing the merged columns.
   """
-  right_dict = element[1].as_dict()
-  left_dict = element[0].as_dict()
-  for k, v in right_dict.items():
-    left_dict[k] = v
-  return beam.Row(**left_dict)
+  left, right = element
+  for k, v in right.items():
+    left[k] = v
+  return beam.Row(**left)
 
 
 class EnrichmentSourceHandler(Caller[InputT, OutputT]):

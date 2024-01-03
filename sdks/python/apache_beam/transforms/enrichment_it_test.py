@@ -42,19 +42,19 @@ class _Request(NamedTuple):
 
 def _custom_join(element):
   """custom_join returns the id and resp_payload along with a timestamp"""
-  right_dict = element[1].as_dict()
+  right_dict = element[1]
   right_dict['timestamp'] = time.time()
   return beam.Row(**right_dict)
 
 
-class SampleHTTPEnrichment(EnrichmentSourceHandler[_Request, beam.Row]):
+class SampleHTTPEnrichment(EnrichmentSourceHandler[dict, beam.Row]):
   """Implements ``EnrichmentSourceHandler`` to call the ``EchoServiceGrpc``'s
   HTTP handler.
   """
   def __init__(self, url: str):
     self.url = url + '/v1/echo'  # append path to the mock API.
 
-  def __call__(self, request: _Request, *args, **kwargs):
+  def __call__(self, request: dict, *args, **kwargs):
     """Overrides ``Caller``'s call method invoking the
     ``EchoServiceGrpc``'s HTTP handler with an ``_Request``, returning
     either a successful ``Tuple[beam.Row,beam.Row]`` or throwing either a
@@ -66,7 +66,7 @@ class SampleHTTPEnrichment(EnrichmentSourceHandler[_Request, beam.Row]):
           "POST",
           self.url,
           json={
-              "id": request.id, "payload": str(request.payload, 'utf-8')
+              "id": request['id'], "payload": str(request['payload'], 'utf-8')
           },
           retries=False)
 
@@ -75,8 +75,9 @@ class SampleHTTPEnrichment(EnrichmentSourceHandler[_Request, beam.Row]):
         resp_id = resp_body['id']
         payload = resp_body['payload']
         yield (
-            beam.Row(id=request.id, payload=request.payload),
-            beam.Row(id=resp_id, resp_payload=bytes(payload, 'utf-8')))
+            request, {
+                'id': resp_id, 'resp_payload': bytes(payload, 'utf-8')
+            })
 
       if resp.status == 429:  # Too Many Requests
         raise UserCodeQuotaException(resp.reason)
@@ -93,11 +94,11 @@ class ValidateFields(beam.DoFn):
   def __init__(self, fields):
     self._fields = fields
 
-  def process(self, element: beam.Row, *args, **kwargs):
+  def process(self, element: beam.Row):
     element_dict = element.as_dict()
     if len(element_dict.keys()) != 3:
       raise BeamAssertException(
-          "Expected three fields in enriched PCollection:"
+          "Expected three fields in enriched pcollection:"
           " id, payload and resp_payload")
 
     for field in self._fields:
@@ -113,7 +114,8 @@ class TestEnrichment(unittest.TestCase):
   @classmethod
   def setUpClass(cls) -> None:
     cls.options = EchoITOptions()
-    http_endpoint_address = 'http://10.138.0.32:8080'
+    # http_endpoint_address = 'http://10.138.0.32:8080'
+    http_endpoint_address = 'http://localhost:8080'
     cls.client = SampleHTTPEnrichment(http_endpoint_address)
 
   @classmethod
@@ -127,7 +129,8 @@ class TestEnrichment(unittest.TestCase):
     """Tests Enrichment Transform against the Mock-API HTTP endpoint
     with the default cross join."""
     client, options = TestEnrichment._get_client_and_options()
-    req = _Request(id=options.never_exceed_quota_id, payload=_PAYLOAD)
+    # req = _Request(id=options.never_exceed_quota_id, payload=_PAYLOAD)
+    req = {'id': options.never_exceed_quota_id, 'payload': _PAYLOAD}
     fields = ['id', 'payload', 'resp_payload']
     with TestPipeline(is_integration_test=True) as test_pipeline:
       _ = (
@@ -140,7 +143,7 @@ class TestEnrichment(unittest.TestCase):
     """Tests Enrichment Transform against the Mock-API HTTP endpoint
     with a custom join function."""
     client, options = TestEnrichment._get_client_and_options()
-    req = _Request(id=options.never_exceed_quota_id, payload=_PAYLOAD)
+    req = {'id': options.never_exceed_quota_id, 'payload': _PAYLOAD}
     fields = ['id', 'resp_payload', 'timestamp']
     with TestPipeline(is_integration_test=True) as test_pipeline:
       _ = (

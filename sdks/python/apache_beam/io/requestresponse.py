@@ -155,7 +155,8 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
-                            beam.PCollection[ResponseT]]):
+                            beam.PCollection[ResponseT]],
+            Generic[RequestT, ResponseT]):
   """(Internal-only) PTransform that invokes a remote function on each element
    of the input PCollection.
 
