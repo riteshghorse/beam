@@ -21,11 +21,15 @@ import concurrent.futures
 import contextlib
 import logging
 import sys
+import time
 from typing import Generic
 from typing import Optional
 from typing import TypeVar
 
 import apache_beam as beam
+from apache_beam.io.components.adaptive_throttler import AdaptiveThrottler
+from apache_beam.metrics import Metrics
+from apache_beam.ml.inference.vertex_ai_inference import MSEC_TO_SEC
 
 RequestT = TypeVar('RequestT')
 ResponseT = TypeVar('ResponseT')
@@ -99,6 +103,23 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
+class _MetricsCollector:
+  """A metrics collector that tracks RequestResponseIO related usage."""
+  def __init__(self, namespace: str):
+    """
+    Args:
+      namespace: Namespace for the metrics.
+    """
+    self.throttled_requests = Metrics.counter(
+        namespace, 'numberOfThrottledRequests')
+    self.throttled_secs = Metrics.counter(
+        namespace, 'cumulativeThrottlingSeconds')
+    self.timeout_requests = Metrics.counter(
+        namespace, 'numberOfRequestsTimedOut')
+    self.successful_requests = Metrics.counter(
+        namespace, 'numberOfSuccessfulRequests')
+
+
 class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
                                         beam.PCollection[ResponseT]]):
   """A :class:`RequestResponseIO` transform to read and write to APIs.
@@ -151,7 +172,8 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
         caller=self._caller,
         timeout=self._timeout,
         should_backoff=self._should_backoff,
-        repeater=self._repeater)
+        repeater=self._repeater,
+        throttled=False)
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
@@ -168,6 +190,12 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
       caller (:class:`apache_beam.io.requestresponse.Caller`): a callable
         object that invokes API call.
       timeout (float): timeout value in seconds to wait for response from API.
+      should_backoff (~apache_beam.io.requestresponse.ShouldBackOff):
+        (Optional) provides methods for backoff.
+      repeater (~apache_beam.io.requestresponse.Repeater): (Optional) provides
+        methods to repeat requests to API.
+      throttled (bool): If the PCollection is already throttled with
+        Throttle transform.
   """
   def __init__(
       self,
@@ -175,42 +203,52 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
       timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
       repeater: Optional[Repeater] = None,
+      throttled: bool = True,
   ):
-    """Initialize the _Call transform.
-    Args:
-      caller (:class:`apache_beam.io.requestresponse.Caller`): a callable
-        object that invokes API call.
-      timeout (float): timeout value in seconds to wait for response from API.
-      should_backoff (~apache_beam.io.requestresponse.ShouldBackOff):
-        (Optional) provides methods for backoff.
-      repeater (~apache_beam.io.requestresponse.Repeater): (Optional) provides
-        methods to repeat requests to API.
-    """
     self._caller = caller
     self._timeout = timeout
     self._should_backoff = should_backoff
     self._repeater = repeater
+    self._throttler = None if throttled else AdaptiveThrottler(
+        window_ms=1, bucket_ms=1, overload_ratio=2)
 
   def expand(
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
-    return requests | beam.ParDo(_CallDoFn(self._caller, self._timeout))
+    return requests | beam.ParDo(
+        _CallDoFn(self._caller, self._timeout, self._throttler))
 
 
 class _CallDoFn(beam.DoFn):
   def setup(self):
     self._caller.__enter__()
+    self._metrics_collector = _MetricsCollector(self._caller.__str__())
 
-  def __init__(self, caller: Caller, timeout: float):
+  def __init__(
+      self, caller: Caller, timeout: float, throttler: AdaptiveThrottler):
     self._caller = caller
     self._timeout = timeout
+    self._throttler = throttler
 
   def process(self, request: RequestT, *args, **kwargs):
+    is_throttled_request = False
+    if self._throttler:
+      while self._throttler.throttle_request(time.time() * MSEC_TO_SEC):
+        _LOGGER.info("Delaying request for 5 seconds")
+        time.sleep(5)
+        self._metrics_collector.throttled_secs.inc(5)
+        is_throttled_request = True
+
+    if is_throttled_request:
+      self._metrics_collector.throttled_requests.inc(1)
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
       future = executor.submit(self._caller, request)
       try:
         yield future.result(timeout=self._timeout)
+        self._metrics_collector.successful_requests.inc(1)
       except concurrent.futures.TimeoutError:
+        self._metrics_collector.timeout_requests.inc(1)
         raise UserCodeTimeoutException(
             f'Timeout {self._timeout} exceeded '
             f'while completing request: {request}')
