@@ -103,6 +103,13 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
+class RedisCacheRead(
+    CacheReader,
+    beam.PTransform[[beam.PCollection[RequestT], beam.PCollection[ResponseT]],
+                    beam.PCollection[ResponseT]]):
+  pass
+
+
 class _MetricsCollector:
   """A metrics collector that tracks RequestResponseIO related usage."""
   def __init__(self, namespace: str):
