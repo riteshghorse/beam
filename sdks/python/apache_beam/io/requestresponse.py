@@ -22,7 +22,7 @@ import contextlib
 import logging
 import sys
 import time
-from typing import Generic
+from typing import Generic, Tuple
 from typing import Optional
 from typing import TypeVar
 
@@ -103,11 +103,17 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
-class RedisCacheRead(
-    CacheReader,
+class RedisCacheWrite(
+    CacheWriter,
     beam.PTransform[[beam.PCollection[RequestT], beam.PCollection[ResponseT]],
                     beam.PCollection[ResponseT]]):
-  pass
+  def __init__(self):
+    pass
+
+  def expand(
+      self,
+      inputs: Tuple[beam.PCollection[RequestT], beam.PCollection[ResponseT]]):
+    pass
 
 
 class _MetricsCollector:
