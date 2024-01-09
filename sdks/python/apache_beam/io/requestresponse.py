@@ -22,7 +22,7 @@ import contextlib
 import logging
 import sys
 import time
-from typing import Generic, Tuple
+from typing import Generic
 from typing import Optional
 from typing import TypeVar
 
@@ -30,6 +30,7 @@ import apache_beam as beam
 from apache_beam.io.components.adaptive_throttler import AdaptiveThrottler
 from apache_beam.metrics import Metrics
 from apache_beam.ml.inference.vertex_ai_inference import MSEC_TO_SEC
+from apache_beam.utils import retry
 
 RequestT = TypeVar('RequestT')
 ResponseT = TypeVar('ResponseT')
@@ -103,17 +104,17 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
-class RedisCacheWrite(
-    CacheWriter,
-    beam.PTransform[[beam.PCollection[RequestT], beam.PCollection[ResponseT]],
-                    beam.PCollection[ResponseT]]):
-  def __init__(self):
-    pass
-
-  def expand(
-      self,
-      inputs: Tuple[beam.PCollection[RequestT], beam.PCollection[ResponseT]]):
-    pass
+# class RedisCacheWrite(
+#     CacheWriter,
+#     beam.PTransform[[beam.PCollection[RequestT], beam.PCollection[ResponseT]],
+#                     beam.PCollection[ResponseT]]):
+#   def __init__(self):
+#     pass
+#
+#   def expand(
+#       self,
+#       inputs: Tuple[beam.PCollection[RequestT], beam.PCollection[ResponseT]]):
+#     pass
 
 
 class _MetricsCollector:
@@ -181,12 +182,15 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
     # TODO(riteshghorse): add Cache and Throttle PTransforms.
-    return requests | _Call(
+    response = requests | _Call(
         caller=self._caller,
         timeout=self._timeout,
         should_backoff=self._should_backoff,
         repeater=self._repeater,
         throttled=False)
+    # dict_coder = coders.MapCoder(coders.StrUtf8Coder(), coders.FastCoder())
+    # dict_coder.encode()
+    return response
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
@@ -255,6 +259,10 @@ class _CallDoFn(beam.DoFn):
     if is_throttled_request:
       self._metrics_collector.throttled_requests.inc(1)
 
+    return self._make_request(request)
+
+  @retry.with_exponential_backoff(num_retries=5)
+  def _make_request(self, request: RequestT):
     with concurrent.futures.ThreadPoolExecutor() as executor:
       future = executor.submit(self._caller, request)
       try:
