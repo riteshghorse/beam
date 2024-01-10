@@ -104,19 +104,6 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
-# class RedisCacheWrite(
-#     CacheWriter,
-#     beam.PTransform[[beam.PCollection[RequestT], beam.PCollection[ResponseT]],
-#                     beam.PCollection[ResponseT]]):
-#   def __init__(self):
-#     pass
-#
-#   def expand(
-#       self,
-#       inputs: Tuple[beam.PCollection[RequestT], beam.PCollection[ResponseT]]):
-#     pass
-
-
 class _MetricsCollector:
   """A metrics collector that tracks RequestResponseIO related usage."""
   def __init__(self, namespace: str):
