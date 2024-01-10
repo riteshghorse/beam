@@ -104,6 +104,29 @@ class PreCallThrottler(abc.ABC):
   pass
 
 
+class DefaultThrottler(PreCallThrottler):
+  """Default throttler that uses
+  :class:`apache_beam.io.components.adaptive_throttler.AdaptiveThrottler`
+
+  Args:
+    window_ms (int): length of history to consider, in ms, to set throttling.
+    bucket_ms (int): granularity of time buckets that we store data in, in ms.
+    overload_ratio (float): the target ratio between requests sent and
+      successful requests. This is "K" in the formula in
+      https://landing.google.com/sre/book/chapters/handling-overload.html.
+    delay_secs (int): minimum number of seconds to throttle a request.
+  """
+  def __init__(
+      self,
+      window_ms: int = 1,
+      bucket_ms: int = 1,
+      overload_ratio: float = 2,
+      delay_secs: int = 5):
+    self.throttler = AdaptiveThrottler(
+        window_ms=window_ms, bucket_ms=bucket_ms, overload_ratio=overload_ratio)
+    self.delay_secs = delay_secs
+
+
 class _MetricsCollector:
   """A metrics collector that tracks RequestResponseIO related usage."""
   def __init__(self, namespace: str):
@@ -143,7 +166,7 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
       repeater: Optional[Repeater] = None,
       cache_reader: Optional[CacheReader] = None,
       cache_writer: Optional[CacheWriter] = None,
-      throttler: Optional[PreCallThrottler] = None,
+      throttler: Optional[PreCallThrottler] = DefaultThrottler(),
   ):
     """
     Instantiates a RequestResponseIO transform.
@@ -175,13 +198,26 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
     # TODO(riteshghorse): handle Cache and Throttle PTransforms.
-    response = requests | _Call(
-        caller=self._caller,
-        timeout=self._timeout,
-        should_backoff=self._should_backoff,
-        repeater=self._repeater,
-        throttled=False)
-    return response
+    if isinstance(self._throttler, DefaultThrottler):
+      return requests | _Call(
+          caller=self._caller,
+          timeout=self._timeout,
+          should_backoff=self._should_backoff,
+          repeater=self._repeater,
+          throttler=self._throttler)
+    else:
+      return requests | _Call(
+          caller=self._caller,
+          timeout=self._timeout,
+          should_backoff=self._should_backoff,
+          repeater=self._repeater)
+
+
+def retry_on_exception(e):
+  """retry on exceptions caused by unavailabity of the remote server."""
+  if isinstance(e, UserCodeTimeoutException):
+    return True
+  return False
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
@@ -202,8 +238,8 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
         (Optional) provides methods for backoff.
       repeater (~apache_beam.io.requestresponse.Repeater): (Optional) provides
         methods to repeat requests to API.
-      throttled (bool): If the PCollection is already throttled with
-        Throttle transform.
+      throttler (~apache_beam.io.requestresponse.PreCallThrottler):
+        (Optional) provides methods to pre-throttle a request.
   """
   def __init__(
       self,
@@ -211,14 +247,13 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
       timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
       repeater: Optional[Repeater] = None,
-      throttled: bool = True,
+      throttler: Optional[PreCallThrottler] = None,
   ):
     self._caller = caller
     self._timeout = timeout
     self._should_backoff = should_backoff
     self._repeater = repeater
-    self._throttler = None if throttled else AdaptiveThrottler(
-        window_ms=1, bucket_ms=1, overload_ratio=2)
+    self._throttler = throttler
 
   def expand(
       self,
@@ -234,19 +269,20 @@ class _CallDoFn(beam.DoFn):
     self._metrics_collector.setup_counter.inc(1)
 
   def __init__(
-      self, caller: Caller, timeout: float, throttler: AdaptiveThrottler):
+      self, caller: Caller, timeout: float, throttler: PreCallThrottler):
     self._caller = caller
     self._timeout = timeout
     self._throttler = throttler
 
   def process(self, request: RequestT, *args, **kwargs):
     self._metrics_collector.requests.inc(1)
-
     is_throttled_request = False
     if self._throttler:
-      while self._throttler.throttle_request(time.time() * MSEC_TO_SEC):
-        _LOGGER.info("Delaying request for 5 seconds")
-        time.sleep(5)
+      while self._throttler.throttler.throttle_request(time.time() *
+                                                       MSEC_TO_SEC):
+        _LOGGER.info(
+            "Delaying request for %d seconds" % self._throttler.delay_secs)
+        time.sleep(self._throttler.delay_secs)
         self._metrics_collector.throttled_secs.inc(5)
         is_throttled_request = True
 
@@ -255,7 +291,8 @@ class _CallDoFn(beam.DoFn):
 
     return self._make_request(request)
 
-  @retry.with_exponential_backoff(num_retries=5)
+  @retry.with_exponential_backoff(
+      num_retries=5, retry_filter=retry_on_exception)
   def _make_request(self, request: RequestT):
     with concurrent.futures.ThreadPoolExecutor() as executor:
       future = executor.submit(self._caller, request)
