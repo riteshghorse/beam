@@ -111,14 +111,20 @@ class _MetricsCollector:
     Args:
       namespace: Namespace for the metrics.
     """
-    self.throttled_requests = Metrics.counter(
-        namespace, 'numberOfThrottledRequests')
+    self.requests = Metrics.counter(namespace, 'requests')
+    self.responses = Metrics.counter(namespace, 'responses')
+    self.failures = Metrics.counter(namespace, 'failures')
+    self.throttled_requests = Metrics.counter(namespace, 'throttled_requests')
     self.throttled_secs = Metrics.counter(
         namespace, 'cumulativeThrottlingSeconds')
-    self.timeout_requests = Metrics.counter(
-        namespace, 'numberOfRequestsTimedOut')
-    self.successful_requests = Metrics.counter(
-        namespace, 'numberOfSuccessfulRequests')
+    self.timeout_requests = Metrics.counter(namespace, 'requests_timed_out')
+    self.call_counter = Metrics.counter(namespace, 'call_invocations')
+    self.setup_counter = Metrics.counter(namespace, 'setup_counter')
+    self.teardown_counter = Metrics.counter(namespace, 'teardown_counter')
+    self.backoff_counter = Metrics.counter(namespace, 'backoff_counter')
+    self.sleeper_counter = Metrics.counter(namespace, 'sleeper_counter')
+    self.should_backoff_counter = Metrics.counter(
+        namespace, 'should_backoff_counter')
 
 
 class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
@@ -168,15 +174,13 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
   def expand(
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
-    # TODO(riteshghorse): add Cache and Throttle PTransforms.
+    # TODO(riteshghorse): handle Cache and Throttle PTransforms.
     response = requests | _Call(
         caller=self._caller,
         timeout=self._timeout,
         should_backoff=self._should_backoff,
         repeater=self._repeater,
         throttled=False)
-    # dict_coder = coders.MapCoder(coders.StrUtf8Coder(), coders.FastCoder())
-    # dict_coder.encode()
     return response
 
 
@@ -227,6 +231,7 @@ class _CallDoFn(beam.DoFn):
   def setup(self):
     self._caller.__enter__()
     self._metrics_collector = _MetricsCollector(self._caller.__str__())
+    self._metrics_collector.setup_counter.inc(1)
 
   def __init__(
       self, caller: Caller, timeout: float, throttler: AdaptiveThrottler):
@@ -235,6 +240,8 @@ class _CallDoFn(beam.DoFn):
     self._throttler = throttler
 
   def process(self, request: RequestT, *args, **kwargs):
+    self._metrics_collector.requests.inc(1)
+
     is_throttled_request = False
     if self._throttler:
       while self._throttler.throttle_request(time.time() * MSEC_TO_SEC):
@@ -254,14 +261,16 @@ class _CallDoFn(beam.DoFn):
       future = executor.submit(self._caller, request)
       try:
         yield future.result(timeout=self._timeout)
-        self._metrics_collector.successful_requests.inc(1)
+        self._metrics_collector.responses.inc(1)
       except concurrent.futures.TimeoutError:
         self._metrics_collector.timeout_requests.inc(1)
         raise UserCodeTimeoutException(
             f'Timeout {self._timeout} exceeded '
             f'while completing request: {request}')
       except RuntimeError:
+        self._metrics_collector.failures.inc(1)
         raise UserCodeExecutionException('could not complete request')
 
   def teardown(self):
+    self._metrics_collector.teardown_counter.inc(1)
     self._caller.__exit__(*sys.exc_info())
