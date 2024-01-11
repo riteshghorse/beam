@@ -26,6 +26,8 @@ from typing import Generic
 from typing import Optional
 from typing import TypeVar
 
+from google.api_core.exceptions import TooManyRequests
+
 import apache_beam as beam
 from apache_beam.io.components.adaptive_throttler import AdaptiveThrottler
 from apache_beam.metrics import Metrics
@@ -52,6 +54,34 @@ class UserCodeQuotaException(UserCodeExecutionException):
 
 class UserCodeTimeoutException(UserCodeExecutionException):
   """Extends ``UserCodeExecutionException`` to signal a user code timeout."""
+
+
+def retry_on_exception(exception: Exception):
+  """retry on exceptions caused by unavailability of the remote server."""
+  return isinstance(exception, TooManyRequests)
+
+
+class _MetricsCollector:
+  """A metrics collector that tracks RequestResponseIO related usage."""
+  def __init__(self, namespace: str):
+    """
+    Args:
+      namespace: Namespace for the metrics.
+    """
+    self.requests = Metrics.counter(namespace, 'requests')
+    self.responses = Metrics.counter(namespace, 'responses')
+    self.failures = Metrics.counter(namespace, 'failures')
+    self.throttled_requests = Metrics.counter(namespace, 'throttled_requests')
+    self.throttled_secs = Metrics.counter(
+        namespace, 'cumulativeThrottlingSeconds')
+    self.timeout_requests = Metrics.counter(namespace, 'requests_timed_out')
+    self.call_counter = Metrics.counter(namespace, 'call_invocations')
+    self.setup_counter = Metrics.counter(namespace, 'setup_counter')
+    self.teardown_counter = Metrics.counter(namespace, 'teardown_counter')
+    self.backoff_counter = Metrics.counter(namespace, 'backoff_counter')
+    self.sleeper_counter = Metrics.counter(namespace, 'sleeper_counter')
+    self.should_backoff_counter = Metrics.counter(
+        namespace, 'should_backoff_counter')
 
 
 class Caller(contextlib.AbstractContextManager,
@@ -86,7 +116,65 @@ class ShouldBackOff(abc.ABC):
 class Repeater(abc.ABC):
   """Repeater provides mechanism to repeat requests for a
   configurable condition."""
-  pass
+  @abc.abstractmethod
+  def repeat(
+      self,
+      caller: Caller,
+      request: RequestT,
+      timeout: float,
+      metrics_collector: Optional[_MetricsCollector]) -> ResponseT:
+    pass
+
+
+def _execute_request(
+    caller: Caller,
+    request: RequestT,
+    timeout: float,
+    metrics_collector: Optional[_MetricsCollector] = None) -> ResponseT:
+  with concurrent.futures.ThreadPoolExecutor() as executor:
+    future = executor.submit(caller, request)
+    try:
+      return future.result(timeout=timeout)
+    except TooManyRequests as e:
+      _LOGGER.warning(
+          'request could not be completed. got code %i from the service.',
+          e.code)
+      raise e
+    except concurrent.futures.TimeoutError:
+      if metrics_collector:
+        metrics_collector.timeout_requests.inc(1)
+      raise UserCodeTimeoutException(
+          f'Timeout {timeout} exceeded '
+          f'while completing request: {request}')
+    except RuntimeError:
+      if metrics_collector:
+        metrics_collector.failures.inc(1)
+      raise UserCodeExecutionException('could not complete request')
+
+
+class ExponentialBackOffRepeater(Repeater):
+  def __init__(self):
+    pass
+
+  @retry.with_exponential_backoff(
+      num_retries=2, retry_filter=retry_on_exception)
+  def repeat(
+      self,
+      caller: Caller,
+      request: RequestT,
+      timeout: float,
+      metrics_collector: Optional[_MetricsCollector] = None) -> ResponseT:
+    return _execute_request(caller, request, timeout, metrics_collector)
+
+
+class NoOpsRepeater(Repeater):
+  def repeat(
+      self,
+      caller: Caller,
+      request: RequestT,
+      timeout: float,
+      metrics_collector: Optional[_MetricsCollector]) -> ResponseT:
+    return _execute_request(caller, request, timeout, metrics_collector)
 
 
 class CacheReader(abc.ABC):
@@ -127,29 +215,6 @@ class DefaultThrottler(PreCallThrottler):
     self.delay_secs = delay_secs
 
 
-class _MetricsCollector:
-  """A metrics collector that tracks RequestResponseIO related usage."""
-  def __init__(self, namespace: str):
-    """
-    Args:
-      namespace: Namespace for the metrics.
-    """
-    self.requests = Metrics.counter(namespace, 'requests')
-    self.responses = Metrics.counter(namespace, 'responses')
-    self.failures = Metrics.counter(namespace, 'failures')
-    self.throttled_requests = Metrics.counter(namespace, 'throttled_requests')
-    self.throttled_secs = Metrics.counter(
-        namespace, 'cumulativeThrottlingSeconds')
-    self.timeout_requests = Metrics.counter(namespace, 'requests_timed_out')
-    self.call_counter = Metrics.counter(namespace, 'call_invocations')
-    self.setup_counter = Metrics.counter(namespace, 'setup_counter')
-    self.teardown_counter = Metrics.counter(namespace, 'teardown_counter')
-    self.backoff_counter = Metrics.counter(namespace, 'backoff_counter')
-    self.sleeper_counter = Metrics.counter(namespace, 'sleeper_counter')
-    self.should_backoff_counter = Metrics.counter(
-        namespace, 'should_backoff_counter')
-
-
 class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
                                         beam.PCollection[ResponseT]]):
   """A :class:`RequestResponseIO` transform to read and write to APIs.
@@ -163,7 +228,7 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
       caller: Caller,
       timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
-      repeater: Optional[Repeater] = None,
+      repeater: Optional[Repeater] = ExponentialBackOffRepeater(),
       cache_reader: Optional[CacheReader] = None,
       cache_writer: Optional[CacheWriter] = None,
       throttler: Optional[PreCallThrottler] = DefaultThrottler(),
@@ -189,7 +254,10 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
     self._caller = caller
     self._timeout = timeout
     self._should_backoff = should_backoff
-    self._repeater = repeater
+    if repeater:
+      self._repeater = repeater
+    else:
+      self._repeater = NoOpsRepeater()
     self._cache_reader = cache_reader
     self._cache_writer = cache_writer
     self._throttler = throttler
@@ -211,13 +279,6 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
           timeout=self._timeout,
           should_backoff=self._should_backoff,
           repeater=self._repeater)
-
-
-def retry_on_exception(e):
-  """retry on exceptions caused by unavailabity of the remote server."""
-  if isinstance(e, UserCodeTimeoutException):
-    return True
-  return False
 
 
 class _Call(beam.PTransform[beam.PCollection[RequestT],
@@ -259,7 +320,7 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
     return requests | beam.ParDo(
-        _CallDoFn(self._caller, self._timeout, self._throttler))
+        _CallDoFn(self._caller, self._timeout, self._repeater, self._throttler))
 
 
 class _CallDoFn(beam.DoFn):
@@ -269,13 +330,19 @@ class _CallDoFn(beam.DoFn):
     self._metrics_collector.setup_counter.inc(1)
 
   def __init__(
-      self, caller: Caller, timeout: float, throttler: PreCallThrottler):
+      self,
+      caller: Caller,
+      timeout: float,
+      repeater: Repeater,
+      throttler: PreCallThrottler):
     self._caller = caller
     self._timeout = timeout
+    self._repeater = repeater
     self._throttler = throttler
 
   def process(self, request: RequestT, *args, **kwargs):
     self._metrics_collector.requests.inc(1)
+
     is_throttled_request = False
     if self._throttler:
       while self._throttler.throttler.throttle_request(time.time() *
@@ -289,24 +356,15 @@ class _CallDoFn(beam.DoFn):
     if is_throttled_request:
       self._metrics_collector.throttled_requests.inc(1)
 
-    return self._make_request(request)
-
-  @retry.with_exponential_backoff(
-      num_retries=5, retry_filter=retry_on_exception)
-  def _make_request(self, request: RequestT):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-      future = executor.submit(self._caller, request)
-      try:
-        yield future.result(timeout=self._timeout)
-        self._metrics_collector.responses.inc(1)
-      except concurrent.futures.TimeoutError:
-        self._metrics_collector.timeout_requests.inc(1)
-        raise UserCodeTimeoutException(
-            f'Timeout {self._timeout} exceeded '
-            f'while completing request: {request}')
-      except RuntimeError:
-        self._metrics_collector.failures.inc(1)
-        raise UserCodeExecutionException('could not complete request')
+    try:
+      req_time = time.time()
+      response = self._repeater.repeat(
+          self._caller, request, self._timeout, self._metrics_collector)
+      self._metrics_collector.responses.inc(1)
+      self._throttler.throttler.successful_request(req_time * MSEC_TO_SEC)
+      yield response
+    except Exception as e:
+      raise e
 
   def teardown(self):
     self._metrics_collector.teardown_counter.inc(1)
