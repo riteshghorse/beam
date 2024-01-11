@@ -58,7 +58,9 @@ class UserCodeTimeoutException(UserCodeExecutionException):
 
 def retry_on_exception(exception: Exception):
   """retry on exceptions caused by unavailability of the remote server."""
-  return isinstance(exception, TooManyRequests)
+  return isinstance(
+      exception,
+      (TooManyRequests, UserCodeTimeoutException, UserCodeQuotaException))
 
 
 class _MetricsCollector:
@@ -119,15 +121,28 @@ class Repeater(abc.ABC):
   @abc.abstractmethod
   def repeat(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       request: RequestT,
       timeout: float,
       metrics_collector: Optional[_MetricsCollector]) -> ResponseT:
+    """
+    repeat method is called from the RequestResponseIO when a repeater is
+    enabled.
+
+    Args:
+    caller: :class:`apache_beam.io.requestresponse.Caller` object that calls
+      the API.
+    request: input request to repeat.
+    timeout: time to wait for the request to complete.
+    metrics_collector: (Optional) a
+      :class:`apache_beam.io.requestresponse._MetricsCollector` object to
+      collect the metrics for RequestResponseIO.
+    """
     pass
 
 
 def _execute_request(
-    caller: Caller,
+    caller: Caller[RequestT, ResponseT],
     request: RequestT,
     timeout: float,
     metrics_collector: Optional[_MetricsCollector] = None) -> ResponseT:
@@ -153,6 +168,13 @@ def _execute_request(
 
 
 class ExponentialBackOffRepeater(Repeater):
+  """Exponential BackOff Repeater uses exponential backoff retry strategy for
+  exceptions due to the remote service such as TooManyRequests (HTTP 429),
+  UserCodeTimeoutException, UserCodeQuotaException.
+
+  It utilizes the decorator
+  :func:`apache_beam.utils.retry.with_exponential_backoff`.
+  """
   def __init__(self):
     pass
 
@@ -160,17 +182,33 @@ class ExponentialBackOffRepeater(Repeater):
       num_retries=2, retry_filter=retry_on_exception)
   def repeat(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       request: RequestT,
       timeout: float,
       metrics_collector: Optional[_MetricsCollector] = None) -> ResponseT:
+    """
+      repeat method is called from the RequestResponseIO when a repeater is
+      enabled.
+
+      Args:
+      caller: :class:`apache_beam.io.requestresponse.Caller` object that calls
+        the API.
+      request: input request to repeat.
+      timeout: time to wait for the request to complete.
+      metrics_collector: (Optional) a
+        :class:`apache_beam.io.requestresponse._MetricsCollector` object to
+        collect the metrics for RequestResponseIO.
+    """
     return _execute_request(caller, request, timeout, metrics_collector)
 
 
 class NoOpsRepeater(Repeater):
+  """
+  NoOpsRepeater executes a request just once irrespective of any exception.
+  """
   def repeat(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       request: RequestT,
       timeout: float,
       metrics_collector: Optional[_MetricsCollector]) -> ResponseT:
@@ -225,7 +263,7 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
   """
   def __init__(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
       repeater: Optional[Repeater] = ExponentialBackOffRepeater(),
@@ -265,7 +303,7 @@ class RequestResponseIO(beam.PTransform[beam.PCollection[RequestT],
   def expand(
       self,
       requests: beam.PCollection[RequestT]) -> beam.PCollection[ResponseT]:
-    # TODO(riteshghorse): handle Cache and Throttle PTransforms.
+    # TODO(riteshghorse): handle Cache and Throttle PTransforms when available.
     if isinstance(self._throttler, DefaultThrottler):
       return requests | _Call(
           caller=self._caller,
@@ -304,7 +342,7 @@ class _Call(beam.PTransform[beam.PCollection[RequestT],
   """
   def __init__(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       timeout: Optional[float] = DEFAULT_TIMEOUT_SECS,
       should_backoff: Optional[ShouldBackOff] = None,
       repeater: Optional[Repeater] = None,
@@ -331,7 +369,7 @@ class _CallDoFn(beam.DoFn):
 
   def __init__(
       self,
-      caller: Caller,
+      caller: Caller[RequestT, ResponseT],
       timeout: float,
       repeater: Repeater,
       throttler: PreCallThrottler):

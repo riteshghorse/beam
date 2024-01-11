@@ -33,11 +33,10 @@ from apache_beam.transforms.enrichment import Enrichment
 from apache_beam.transforms.enrichment import EnrichmentSourceHandler
 
 
-def _custom_join(element):
+def _custom_join(left, right):
   """custom_join returns the id and resp_payload along with a timestamp"""
-  right_dict = element[1]
-  right_dict['timestamp'] = time.time()
-  return beam.Row(**right_dict)
+  right['timestamp'] = time.time()
+  return beam.Row(**right)
 
 
 class SampleHTTPEnrichment(EnrichmentSourceHandler[dict, beam.Row]):
@@ -107,8 +106,7 @@ class TestEnrichment(unittest.TestCase):
   @classmethod
   def setUpClass(cls) -> None:
     cls.options = EchoITOptions()
-    # http_endpoint_address = 'http://10.138.0.32:8080'  # endpoint of mock api
-    http_endpoint_address = 'http://localhost:8080'  # endpoint of mock api
+    http_endpoint_address = 'http://10.138.0.32:8080'  # endpoint of mock api
     cls.client = SampleHTTPEnrichment(http_endpoint_address)
 
   @classmethod
