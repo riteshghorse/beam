@@ -387,7 +387,7 @@ class _CallDoFn(beam.DoFn):
         _LOGGER.info(
             "Delaying request for %d seconds" % self._throttler.delay_secs)
         time.sleep(self._throttler.delay_secs)
-        self._metrics_collector.throttled_secs.inc(5)
+        self._metrics_collector.throttled_secs.inc(self._throttler.delay_secs)
         is_throttled_request = True
 
     if is_throttled_request:
