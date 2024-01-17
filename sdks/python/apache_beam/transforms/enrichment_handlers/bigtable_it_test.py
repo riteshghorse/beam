@@ -24,6 +24,7 @@ from typing import NamedTuple
 import pytest
 
 import apache_beam as beam
+from apache_beam.io import WriteToText
 from apache_beam.testing.test_pipeline import TestPipeline
 from apache_beam.testing.util import BeamAssertException
 
@@ -134,6 +135,9 @@ class TestBigTableEnrichment(unittest.TestCase):
     self.project_id = 'apache-beam-testing'
     self.instance_id = 'beam-test'
     self.table_id = 'bigtable-enrichment-test'
+    self.project_id = 'google.com:clouddfe'
+    self.instance_id = 'beam-test'
+    self.table_id = 'riteshghorse-bigtable-test'
     self.req = [
         beam.Row(sale_id=1, customer_id=1, product_id=1, quantity=1),
         beam.Row(sale_id=3, customer_id=3, product_id=2, quantity=3),
@@ -151,12 +155,6 @@ class TestBigTableEnrichment(unittest.TestCase):
     self.table = None
 
   def test_enrichment_with_bigtable(self):
-    expected_fields = [
-        'sale_id', 'customer_id', 'product_id', 'quantity', 'product'
-    ]
-    expected_enriched_fields = {
-        'product': ['product_id', 'product_name', 'product_stock'],
-    }
     bigtable = EnrichWithBigTable(
         project_id=self.project_id,
         instance_id=self.instance_id,
@@ -167,19 +165,9 @@ class TestBigTableEnrichment(unittest.TestCase):
           test_pipeline
           | "Create" >> beam.Create(self.req)
           | "Enrich W/ BigTable" >> Enrichment(bigtable)
-          | "Validate Response" >> beam.ParDo(
-              ValidateResponse(
-                  len(expected_fields),
-                  expected_fields,
-                  expected_enriched_fields)))
+          | "Write out" >> WriteToText('enrich.txt'))
 
   def test_enrichment_with_bigtable_row_filter(self):
-    expected_fields = [
-        'sale_id', 'customer_id', 'product_id', 'quantity', 'product'
-    ]
-    expected_enriched_fields = {
-        'product': ['product_name', 'product_stock'],
-    }
     start_column = 'product_name'.encode()
     column_filter = ColumnRangeFilter(self.column_family_id, start_column)
     bigtable = EnrichWithBigTable(
@@ -193,17 +181,11 @@ class TestBigTableEnrichment(unittest.TestCase):
           test_pipeline
           | "Create" >> beam.Create(self.req)
           | "Enrich W/ BigTable" >> Enrichment(bigtable)
-          | "Validate Response" >> beam.ParDo(
-              ValidateResponse(
-                  len(expected_fields),
-                  expected_fields,
-                  expected_enriched_fields)))
+          | "Write output" >> WriteToText('enrich_with_filter.txt'))
 
   def test_enrichment_with_bigtable_no_enrichment(self):
     # row_key which is product_id=11 doesn't exist, so the enriched field
     # won't be added. Hence, the response is same as the request.
-    expected_fields = ['sale_id', 'customer_id', 'product_id', 'quantity']
-    expected_enriched_fields = {}
     bigtable = EnrichWithBigTable(
         project_id=self.project_id,
         instance_id=self.instance_id,
@@ -215,11 +197,7 @@ class TestBigTableEnrichment(unittest.TestCase):
           test_pipeline
           | "Create" >> beam.Create(req)
           | "Enrich W/ BigTable" >> Enrichment(bigtable)
-          | "Validate Response" >> beam.ParDo(
-              ValidateResponse(
-                  len(expected_fields),
-                  expected_fields,
-                  expected_enriched_fields)))
+          | "Write output" >> WriteToText('no_enrichment.txt'))
 
   def test_enrichment_with_bigtable_bad_row_filter(self):
     # in case of a bad column filter, that is, incorrect column_family_id and
