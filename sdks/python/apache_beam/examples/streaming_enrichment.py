@@ -36,7 +36,8 @@ class BytesToRow(beam.DoFn):
   def process(self, element, *args, **kwargs):
     value = json.loads(element.decode('utf-8'))
     time.sleep(2)
-    yield beam.Row(**value)
+    for _ in range(10000):
+      yield beam.Row(**value)
 
 
 def run(save_main_session=True):
@@ -57,8 +58,7 @@ def run(save_main_session=True):
         p
         | "read from pubsub" >> ReadFromPubSub(subscription=subscription)
         | "BytesToRow" >> beam.ParDo(BytesToRow())
-        | "Enrichment" >> Enrichment(bigtable_enrichment)
-        | "Write" >> beam.Map(lambda x: _LOGGER.info("element: %s", x)))
+        | "Enrichment" >> Enrichment(bigtable_enrichment))
 
 
 if __name__ == '__main__':
