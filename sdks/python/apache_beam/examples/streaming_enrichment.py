@@ -35,7 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 class BytesToRow(beam.DoFn):
   def process(self, element, *args, **kwargs):
     value = json.loads(element.decode('utf-8'))
-    time.sleep(3)
+    time.sleep(2)
     yield beam.Row(**value)
 
 
@@ -44,7 +44,7 @@ def run(save_main_session=True):
   pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
 
   project_id, instance_id, table_id = \
-    "google.com:clouddfe", "beam-test", "riteshghorse-notebook"
+    "google.com:clouddfe", "bigtable-enrichment", "riteshghorse-notebook"
   subscription = \
     'projects/google.com:clouddfe/subscriptions/' \
     'riteshghorse-enrichment-example-sub'
