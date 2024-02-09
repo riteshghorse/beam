@@ -31,8 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 class ConvertToBytes(beam.DoFn):
   def process(self, element, *args, **kwargs):
     value = json.dumps(element).encode('utf-8')
-    for _ in range(750):
-      yield value
+    yield value
 
 
 def run(argv=None):
@@ -48,13 +47,13 @@ def run(argv=None):
       'price': i * 100
   } for i in range(1, 9)]
   start_time = time.time()
-  end_time = start_time + 9000
+  end_time = start_time + (60 * 5)
   with beam.Pipeline(options=pipeline_options) as p:
     _ = (
         p
         | 'Stream Data' >> PeriodicImpulse(
-            start_time, end_time, fire_interval=0.00005)
-        | 'Create' >> beam.Map(lambda x: messages[random.randint(1, 7)])
+            start_time, end_time, fire_interval=0.001)
+        | 'Create' >> beam.Map(lambda x: messages[random.randint(0, 7)])
         | 'Convert' >> beam.ParDo(ConvertToBytes())
         | 'Write to PubSub' >> WriteToPubSub(
             'projects/google.com:clouddfe/topics/'

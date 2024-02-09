@@ -20,7 +20,6 @@
 import json
 
 import logging
-import time
 
 import apache_beam as beam
 from apache_beam.io import ReadFromPubSub
@@ -35,9 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 class BytesToRow(beam.DoFn):
   def process(self, element, *args, **kwargs):
     value = json.loads(element.decode('utf-8'))
-    time.sleep(2)
-    for _ in range(10000):
-      yield beam.Row(**value)
+    yield beam.Row(**value)
 
 
 def run(save_main_session=True):
