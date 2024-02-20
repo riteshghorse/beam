@@ -154,6 +154,9 @@ class TestBigTableEnrichment(unittest.TestCase):
     self.project_id = 'apache-beam-testing'
     self.instance_id = 'beam-test'
     self.table_id = 'bigtable-enrichment-test'
+    self.project_id = 'google.com:clouddfe'
+    self.instance_id = 'beam-test'
+    self.table_id = 'riteshghorse-bigtable-test'
     self.req = [
         beam.Row(sale_id=1, customer_id=1, product_id=1, quantity=1),
         beam.Row(sale_id=3, customer_id=3, product_id=2, quantity=3),
