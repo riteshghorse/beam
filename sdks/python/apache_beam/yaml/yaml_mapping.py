@@ -556,6 +556,7 @@ def _SqlMapToFieldsTransform(pcoll, sql_transform_constructor, **mapping_args):
 
 
 @beam.ptransform.ptransform_fn
+@maybe_with_exception_handling_transform_fn
 def _AssignTimestamps(
     pcoll,
     timestamp: Union[str, Dict[str, str]],
