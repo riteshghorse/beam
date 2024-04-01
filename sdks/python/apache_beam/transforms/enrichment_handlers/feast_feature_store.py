@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Optional
 
 from feast import FeatureStore
-from feast.repo_config import load_repo_config
 
 import apache_beam as beam
 from apache_beam.transforms.enrichment import EnrichmentSourceHandler
@@ -59,8 +58,6 @@ class FeastFeatureStoreEnrichmentHandler(EnrichmentSourceHandler[beam.Row,
     self.feature_store_yaml_file = feature_store_yaml_file
     self._exception_level = exception_level
     self._kwargs = kwargs if kwargs else {}
-    self.repo_config = load_repo_config(
-        self.repo_path, self.feature_store_yaml_file)
 
   def __enter__(self):
     """Connect with the Feast Feature Store."""
