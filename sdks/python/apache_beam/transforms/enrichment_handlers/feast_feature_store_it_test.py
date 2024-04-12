@@ -35,9 +35,9 @@ class TestFeastEnrichmentHandler(unittest.TestCase):
 
   def test_feast_enrichment(self):
     requests = [
-        beam.Row(user_id=1, product_id=1),
-        beam.Row(user_id=2, product_id=2),
-        beam.Row(user_id=14, product_id=3),
+        beam.Row(user_id=2, product_id=1),
+        beam.Row(user_id=6, product_id=2),
+        beam.Row(user_id=9, product_id=3),
     ]
     # expected_fields = []
     handler = FeastFeatureStoreEnrichmentHandler(
