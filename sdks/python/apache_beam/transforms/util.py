@@ -790,7 +790,7 @@ class BatchElements(PTransform):
   cost and could be amortized over multiple elements.  It consumes a PCollection
   of element type T and produces a PCollection of element type List[T].
 
-  This transform attempts to find the best batch size between the minimim
+  This transform attempts to find the best batch size between the minimum
   and maximum parameters by profiling the time taken by (fused) downstream
   operations. For a fixed batch size, set the min and max to be equal.
 
