@@ -14,23 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any
 from typing import Callable
+from typing import List
+from typing import Mapping
 from typing import Optional
 from typing import Union
 
+from apache_beam.pvalue import Row
 from google.cloud import bigquery
 
 import apache_beam as beam
 from apache_beam.transforms.enrichment import EnrichmentSourceHandler
-from apache_beam.typehints import List
 
 QueryFn = Callable[[beam.Row], str]
 
 
-class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[beam.Row,
-                                                              List[beam.Row]],
-                                                        Union[beam.Row,
-                                                              List[beam.Row]]]):
+class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
+                                                        Union[Row, List[Row]]]):
   def __init__(
       self,
       project: str,
@@ -89,14 +90,37 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[beam.Row,
       return request, beam.Row(**response_dict)
     else:
       # handle the batching case here.
-      pass
+      batch_size = len(request)
+      raw_query = self.query_template
+      if batch_size > 1:
+        batched_condition_template = ' or '.join([self.condition_template] *
+                                                 batch_size)
+        raw_query = self.query_template.replace(
+            self.condition_template, batched_condition_template)
+      values = []
+      responses = []
+      for req in request:
+        request_dict = req._asdict()
+        values.extend([request_dict.get(field) for field in self.fields])
+      query = raw_query.format(*values)
+      print(query)
+      try:
+        # make a call to bigquery. Probably use QueryParameters to prevent
+        # attacks like SQL injection.
+        result = self.client.query(query=query).result()
+        for r in result:
+          response_dict = dict(zip(r.keys(), r.values()))
+          responses.append((request[0], beam.Row(**response_dict)))
+      except Exception as e:
+        raise RuntimeError(e)
+      return responses
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.client.close()
 
   def get_cache_key(self, request: Union[beam.Row, List[beam.Row]]) -> str:
-    # for input of list of rows, return a list of cache keys
-    if isinstance(request, beam.Row):
-      return "row_key"
-    else:
-      return ['row_key']
+    return 'primary_key'
+
+  def batch_elements_kwargs(self) -> Mapping[str, Any]:
+    """Returns a kwargs suitable for `beam.BatchElements`."""
+    return self._batching_kwargs

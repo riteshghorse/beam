@@ -501,6 +501,7 @@ class _RedisCaller(Caller):
       if not encoded_response:
         # no cache entry present for this request.
         responses.append((req, None))
+        continue
 
       if self.response_coder is None:
         try:
