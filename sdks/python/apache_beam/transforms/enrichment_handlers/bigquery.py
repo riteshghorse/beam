@@ -92,6 +92,7 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
       # handle the batching case here.
       batch_size = len(request)
       raw_query = self.query_template
+      # requests_map = {}
       if batch_size > 1:
         batched_condition_template = ' or '.join([self.condition_template] *
                                                  batch_size)
@@ -101,9 +102,9 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
       responses = []
       for req in request:
         request_dict = req._asdict()
-        values.extend([request_dict.get(field) for field in self.fields])
+        current_values = [request_dict.get(field) for field in self.fields]
+        values.extend(current_values)
       query = raw_query.format(*values)
-      print(query)
       try:
         # make a call to bigquery. Probably use QueryParameters to prevent
         # attacks like SQL injection.

@@ -177,7 +177,7 @@ class Enrichment(beam.PTransform[beam.PCollection[InputT],
         throttler=self._throttler)
 
     # EnrichmentSourceHandler returns a tuple of (request,response).
-    #  if batching is enabled then handle accordingly
+    # if batching is enabled then handle accordingly
     if self._batching_kwargs:
       fetched_data = fetched_data | "Flatten" >> beam.ParDo(FlattenBatch())
 
