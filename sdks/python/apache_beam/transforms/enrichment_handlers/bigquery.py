@@ -67,6 +67,16 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
   def __enter__(self):
     self.client = bigquery.Client(project=self.project)
 
+  def _execute_query(self, query: str):
+    try:
+      results = self.client.query(query=query).result()
+      if self._batching_kwargs:
+        return [dict(row.items()) for row in results]
+      else:
+        return [dict(row.items()) for row in results][0]
+    except RuntimeError:
+      raise RuntimeError("Could not complete the query request: %s" % query)
+
   def __call__(self, request: Union[beam.Row, List[beam.Row]], *args, **kwargs):
     if isinstance(request, beam.Row):
       if self.query_fn:
@@ -78,49 +88,50 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
         values = list(map(request_dict.get, self.fields))
       # construct the query.
       query = self.query_template.format(*values)
-      try:
-        # make a call to bigquery. Probably use QueryParameters to prevent
-        # attacks like SQL injection.
-        result = self.client.query(query=query).result()
-        response_dict = {}
-        for r in result:
-          response_dict = dict(zip(r.keys(), r.values()))
-      except Exception:
-        raise RuntimeError
+      response_dict = self._execute_query(query)
       return request, beam.Row(**response_dict)
     else:
       # handle the batching case here.
+      values = []
+      responses = []
+      requests_map = {}
       batch_size = len(request)
       raw_query = self.query_template
-      # requests_map = {}
       if batch_size > 1:
         batched_condition_template = ' or '.join([self.condition_template] *
                                                  batch_size)
         raw_query = self.query_template.replace(
             self.condition_template, batched_condition_template)
-      values = []
-      responses = []
       for req in request:
         request_dict = req._asdict()
         current_values = [request_dict.get(field) for field in self.fields]
         values.extend(current_values)
+        requests_map.update((val, req) for val in current_values)
       query = raw_query.format(*values)
-      try:
-        # make a call to bigquery. Probably use QueryParameters to prevent
-        # attacks like SQL injection.
-        result = self.client.query(query=query).result()
-        for r in result:
-          response_dict = dict(zip(r.keys(), r.values()))
-          responses.append((request[0], beam.Row(**response_dict)))
-      except Exception as e:
-        raise RuntimeError(e)
+
+      responses_dict = self._execute_query(query)
+      for response in responses_dict:
+        for value in response.values():
+          if value in requests_map:
+            responses.append((requests_map[value], beam.Row(**response)))
       return responses
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.client.close()
 
-  def get_cache_key(self, request: Union[beam.Row, List[beam.Row]]) -> str:
-    return 'primary_key'
+  def get_cache_key(
+      self, request: Union[beam.Row, List[beam.Row]]) -> Union[str, List[str]]:
+    key = ";".join(["%s"] * len(self.fields))
+    if self._batching_kwargs:
+      cache_keys = []
+      for req in request:
+        req_dict = req._asdict()
+        key = ";".join(["%s"] * len(self.fields))
+        cache_keys.extend([key % req_dict[field] for field in self.fields])
+        return cache_keys
+    else:
+      req_dict = request._asdict()
+      return key % (req_dict.get(field) for field in self.fields)
 
   def batch_elements_kwargs(self) -> Mapping[str, Any]:
     """Returns a kwargs suitable for `beam.BatchElements`."""
