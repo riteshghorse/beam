@@ -27,7 +27,7 @@ from google.cloud import bigquery
 import apache_beam as beam
 from apache_beam.transforms.enrichment import EnrichmentSourceHandler
 
-QueryFn = Callable[[beam.Row], str]
+QueryFn = Callable[[beam.Row], Any]
 
 
 class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
