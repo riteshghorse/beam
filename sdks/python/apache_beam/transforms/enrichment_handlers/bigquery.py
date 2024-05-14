@@ -27,7 +27,8 @@ from google.cloud import bigquery
 import apache_beam as beam
 from apache_beam.transforms.enrichment import EnrichmentSourceHandler
 
-QueryFn = Callable[[beam.Row], Any]
+QueryFn = Callable[[beam.Row], str]
+ConditionValueFn = Callable[[beam.Row], List[Any]]
 
 
 class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
@@ -35,37 +36,86 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
   def __init__(
       self,
       project: str,
-      query_template: str,
-      fields: List[str],
       *,
+      table_name: Optional[str] = "",
+      row_restriction_template: Optional[str] = "",
+      fields: Optional[List[str]] = None,
+      column_names: Optional[List[str]] = None,
+      condition_value_fn: Optional[ConditionValueFn] = None,
       query_fn: Optional[QueryFn] = None,
-      condition_template: Optional[str] = "",
       min_batch_size: Optional[int] = None,
       max_batch_size: Optional[int] = None,
+      **kwargs,
   ):
-    """Initialize the `BigQueryEnrichmentHandler`.
+    """BigQuery handler for
+    :class:`apache_beam.transforms.enrichment.Enrichment` transform.
+
+    Example Usage::
+      handler = BigQueryEnrichmentHandler(project=project_name,
+        row_restriction="id='{}'",
+
+        table_name='project.dataset.table',
+
+        fields=fields,
+
+        min_batch_size=2,
+
+        max_batch_size=100,
+      )
 
     Args:
-      project: GCP project ID for the BigQuery table.
-      query_template: a raw query template to use for fetching data.
-        It must contain the placeholder `{}` to replace it with `fields` to
-        fetch values specific to `fields`.
-      fields: Fields present in the input row to substitute in the placeholders
-        in query_template.
+      project: Google Cloud project ID for the BigQuery table.
+      table_name (str): Fully qualified BigQuery table name
+        in the format `project.dataset.table`.
+      row_restriction_template (str): A template string for the `WHERE` clause
+        in the BigQuery query with placeholders to dynamically filter rows
+        based on input data.
+      fields: (Optional[List[str]]) List of field names present in the input
+        `beam.Row`. These are used to construct the WHERE clause
+        (if `condition_value_fn` is not provided).
+      column_names: (Optional[List[str]]) Names of columns to select from the
+        BigQuery table. If not provided, all columns (`*`) are selected.
+      condition_value_fn: (Optional[Callable[[beam.Row], str]]) A function
+        that takes a `beam.Row` and returns a string value to be used in the
+        `WHERE` clause of the BigQuery query.
+      query_fn: (Optional[Callable[[beam.Row], str]]) A function that takes a
+        `beam.Row` and returns a complete BigQuery SQL query string.
+        If provided, it overrides the default query construction that use
+        `fields`, `column_names`, and `condition_value_fn`.
+      min_batch_size: (Optional[int]) Minimum number of rows to batch together
+        when querying BigQuery.
+      max_batch_size: (Optional[int]) Maximum number of rows to batch together.
+      **kwargs: Additional keyword arguments to pass to `bigquery.Client`.
+
+    Note:
+      * `min_batch_size` and `max_batch_size` won't have any effect if the
+        `query_fn` is provided.
+      * Either `fields` or `condition_value_fn` must be provided for query
+        construction if `query_fn` is not provided.
+      * If `query_fn` is provided, it overrides the default query construction.
+      * Ensure appropriate permissions are granted for BigQuery access.
     """
     self.project = project
-    self.query_template = query_template
+    self.column_names = column_names
+    self.select_fields = ",".join(column_names) if column_names else '*'
+    self.row_restriction_template = row_restriction_template
+    self.table_name = table_name
     self.fields = fields
+    self.condition_value_fn = condition_value_fn
     self.query_fn = query_fn
-    self.condition_template = condition_template
+    self.query_template = (
+        "SELECT %s FROM %s WHERE %s" %
+        (self.select_fields, self.table_name, self.row_restriction_template))
+    self.kwargs = kwargs
     self._batching_kwargs = {}
-    if min_batch_size is not None:
-      self._batching_kwargs['min_batch_size'] = min_batch_size
-    if max_batch_size is not None:
-      self._batching_kwargs['max_batch_size'] = max_batch_size
+    if not query_fn:
+      if min_batch_size is not None:
+        self._batching_kwargs['min_batch_size'] = min_batch_size
+      if max_batch_size is not None:
+        self._batching_kwargs['max_batch_size'] = max_batch_size
 
   def __enter__(self):
-    self.client = bigquery.Client(project=self.project)
+    self.client = bigquery.Client(project=self.project, **self.kwargs)
 
   def _execute_query(self, query: str):
     try:
@@ -78,33 +128,23 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
       raise RuntimeError("Could not complete the query request: %s" % query)
 
   def __call__(self, request: Union[beam.Row, List[beam.Row]], *args, **kwargs):
-    if isinstance(request, beam.Row):
-      if self.query_fn:
-        # if a query_fn is provided then it return a list of values
-        # that should be populated into the query template string.
-        values = self.query_fn(request)
-      else:
-        request_dict = request._asdict()
-        values = list(map(request_dict.get, self.fields))
-      # construct the query.
-      query = self.query_template.format(*values)
-      response_dict = self._execute_query(query)
-      return request, beam.Row(**response_dict)
-    else:
-      # handle the batching case here.
+    # raise ValueError(type(request))
+    if isinstance(request, List):
       values = []
       responses = []
       requests_map = {}
       batch_size = len(request)
       raw_query = self.query_template
       if batch_size > 1:
-        batched_condition_template = ' or '.join([self.condition_template] *
-                                                 batch_size)
+        batched_condition_template = ' or '.join(
+            [self.row_restriction_template] * batch_size)
         raw_query = self.query_template.replace(
-            self.condition_template, batched_condition_template)
+            self.row_restriction_template, batched_condition_template)
       for req in request:
         request_dict = req._asdict()
-        current_values = [request_dict.get(field) for field in self.fields]
+        current_values = (
+            self.condition_value_fn(req) if self.condition_value_fn else
+            [request_dict.get(field) for field in self.fields])
         values.extend(current_values)
         requests_map.update((val, req) for val in current_values)
       query = raw_query.format(*values)
@@ -115,6 +155,20 @@ class BigQueryEnrichmentHandler(EnrichmentSourceHandler[Union[Row, List[Row]],
           if value in requests_map:
             responses.append((requests_map[value], beam.Row(**response)))
       return responses
+    else:
+      request_dict = request._asdict()
+      if self.query_fn:
+        # if a query_fn is provided then it return a list of values
+        # that should be populated into the query template string.
+        query = self.query_fn(request)
+      else:
+        values = (
+            self.condition_value_fn(request) if self.condition_value_fn else
+            list(map(request_dict.get, self.fields)))
+        # construct the query.
+        query = self.query_template.format(*values)
+      response_dict = self._execute_query(query)
+      return request, beam.Row(**response_dict)
 
   def __exit__(self, exc_type, exc_val, exc_tb):
     self.client.close()

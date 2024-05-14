@@ -16,12 +16,25 @@
 #
 import unittest
 
+from apache_beam.transforms.enrichment_handlers.vertex_ai_feature_store_it_test import ValidateResponse
+
 import apache_beam as beam
-from apache_beam.io import WriteToText
 from apache_beam.testing.test_pipeline import TestPipeline
 from apache_beam.transforms.enrichment import Enrichment
 from apache_beam.transforms.enrichment_handlers.bigquery import \
   BigQueryEnrichmentHandler
+
+
+def query_fn(row: beam.Row):
+  query = (
+      "SELECT * FROM "
+      "`google.com:clouddfe.my_ecommerce.product_details`"
+      " WHERE id = '{}'".format(row.id))
+  return query
+
+
+def condition_value_fn(row: beam.Row):
+  return [row.id]
 
 
 class TestBigQueryEnrichment(unittest.TestCase):
@@ -32,8 +45,12 @@ class TestBigQueryEnrichment(unittest.TestCase):
         "`google.com:clouddfe.my_ecommerce.product_details`"
         " WHERE id = '{}'")
     self.condition_template = "id = '{}'"
+    self.table_name = "`google.com:clouddfe.my_ecommerce.product_details`"
 
-  def test_valid_params(self):
+  def test_bigquery_enrichment(self):
+    expected_fields = [
+        'id', 'name', 'quantity', 'category', 'brand', 'cost', 'retail_price'
+    ]
     fields = ['id']
     requests = [
         beam.Row(
@@ -47,18 +64,96 @@ class TestBigQueryEnrichment(unittest.TestCase):
     ]
     handler = BigQueryEnrichmentHandler(
         project=self.project,
-        query_template=self.query_template,
+        row_restriction_template=self.condition_template,
+        table_name=self.table_name,
         fields=fields,
-        condition_template=self.condition_template,
         min_batch_size=2,
         max_batch_size=100,
     )
     with TestPipeline(is_integration_test=True) as test_pipeline:
       _ = (
           test_pipeline
-          | "Create" >> beam.Create(requests)
-          | "Enrichment" >> Enrichment(handler)
-          | "Output" >> WriteToText('output.txt'))
+          | beam.Create(requests)
+          | Enrichment(handler)
+          | beam.ParDo(ValidateResponse(expected_fields)))
+
+  def test_bigquery_enrichment_with_query_fn(self):
+    expected_fields = [
+        'id', 'name', 'quantity', 'category', 'brand', 'cost', 'retail_price'
+    ]
+    requests = [
+        beam.Row(
+            id='13842',
+            name='low profile dyed cotton twill cap - navy w39s55d',
+            quantity=2),
+        beam.Row(
+            id='15816',
+            name='low profile dyed cotton twill cap - putty w39s55d',
+            quantity=1),
+    ]
+    handler = BigQueryEnrichmentHandler(project=self.project, query_fn=query_fn)
+    with TestPipeline(is_integration_test=True) as test_pipeline:
+      _ = (
+          test_pipeline
+          | beam.Create(requests)
+          | Enrichment(handler)
+          | beam.ParDo(ValidateResponse(expected_fields)))
+
+  def test_bigquery_enrichment_with_condition_value_fn(self):
+    expected_fields = [
+        'id', 'name', 'quantity', 'category', 'brand', 'cost', 'retail_price'
+    ]
+    requests = [
+        beam.Row(
+            id='13842',
+            name='low profile dyed cotton twill cap - navy w39s55d',
+            quantity=2),
+        beam.Row(
+            id='15816',
+            name='low profile dyed cotton twill cap - putty w39s55d',
+            quantity=1),
+    ]
+    handler = BigQueryEnrichmentHandler(
+        project=self.project,
+        row_restriction_template=self.condition_template,
+        table_name=self.table_name,
+        condition_value_fn=condition_value_fn,
+        min_batch_size=2,
+        max_batch_size=100,
+    )
+    with TestPipeline(is_integration_test=True) as test_pipeline:
+      _ = (
+          test_pipeline
+          | beam.Create(requests)
+          | Enrichment(handler)
+          | beam.ParDo(ValidateResponse(expected_fields)))
+
+  def test_bigquery_enrichment_with_condition_without_batch(self):
+    expected_fields = [
+        'id', 'name', 'quantity', 'category', 'brand', 'cost', 'retail_price'
+    ]
+    requests = [
+        beam.Row(
+            id='13842',
+            name='low profile dyed cotton twill cap - navy w39s55d',
+            quantity=2),
+        beam.Row(
+            id='15816',
+            name='low profile dyed cotton twill cap - putty w39s55d',
+            quantity=1),
+    ]
+    handler = BigQueryEnrichmentHandler(
+        project=self.project,
+        row_restriction_template=self.condition_template,
+        table_name=self.table_name,
+        condition_value_fn=condition_value_fn,
+    )
+    with TestPipeline(is_integration_test=True) as test_pipeline:
+      _ = (
+          test_pipeline
+          | beam.Create(requests)
+          | Enrichment(handler)
+          | beam.ParDo(ValidateResponse(expected_fields)))
 
 
 if __name__ == '__main__':
