@@ -36,7 +36,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.13.8
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.42.2
 	github.com/aws/smithy-go v1.20.2
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/go-connections v0.6.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-sql-driver/mysql v1.8.0
 	github.com/golang/protobuf v1.5.4 // TODO(danoliveira): Fully replace this with google.golang.org/protobuf
