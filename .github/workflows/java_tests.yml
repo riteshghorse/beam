@@ -52,7 +52,7 @@ jobs:
       gcp-variables-set: ${{ steps.check_gcp_variables.outputs.gcp-variables-set }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: "Check are GCP variables set"
         run: "./scripts/ci/ci_check_are_gcp_variables_set.sh"
         id: check_gcp_variables
@@ -73,7 +73,7 @@ jobs:
         os: [[self-hosted, ubuntu-20.04, main], macos-latest, windows-latest]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
           submodules: recursive
@@ -130,7 +130,7 @@ jobs:
         os: [[self-hosted, ubuntu-20.04, main], macos-latest, windows-latest]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
           submodules: recursive
@@ -169,7 +169,7 @@ jobs:
       )
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
           submodules: recursive

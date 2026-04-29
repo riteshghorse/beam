@@ -55,7 +55,7 @@ jobs:
       DEBUG: ""
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: release-${{ github.event.inputs.RELEASE }}
       - name: Set git config
